@@ -1,7 +1,10 @@
 # gta6
 why gta taking so long to drop? 
 
-> can i breakdown the game dev framework for a complex open world game like gta6? 
+--- 
+> can i breakdown the game dev framework for a complex open world game like gta6?
+
+video on how gta3 was optimized on the ps2: https://www.youtube.com/watch?v=cIbCxbrBCys
 
 
 This is a brilliant next step—you're moving from *building* a game in small bites to *understanding why* real studios build the way they do. Studying a giant like GTA6’s delays and a complete lifecycle like Black Ops 3 teaches you dependency chains, scope risks, and iteration strategies you can’t get from a textbook. Let's break down how to approach this research and store it effectively.
