@@ -1,0 +1,6 @@
+/build*/
+/.cache/
+/release/
+*.png
+*.log
+.DS_Store
