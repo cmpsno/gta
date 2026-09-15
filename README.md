@@ -1,5 +1,8 @@
 # Palm District — open-world sandbox v0
 
+<img width="1280" height="800" alt="image" src="https://github.com/user-attachments/assets/ceb7e163-668f-4b94-8661-d7a25bfc9d6e" />
+
+
 A playable **C++17 / raylib 3D prototype** based on your handwritten GTA-inspired learning notes. Explore a coastal neighborhood, switch between character and vehicle control, enter a studio, and swim along the shore. Everything is made from simple shapes.
 
 ## Play on Windows
