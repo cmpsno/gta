@@ -1,4 +1,5 @@
 #pragma once
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -61,12 +62,25 @@ struct World {
     static constexpr float WaterEdge = 74;
     World();
 };
+class Simulation; // Interactable callbacks observe/mutate it; defined below.
+// V0.3: a proximity interaction with a dynamic anchor, an eligibility check,
+// and an effect. Car entry, studio entry/exit, and NPC greeting are all
+// instances of this one concept; adding a new interactable is data
+// registration in interactables(), not new branches in interact().
+struct Interactable {
+    std::function<Vec2()> position;
+    float radius = 0;
+    std::function<bool(const Simulation&)> eligible;
+    std::function<void(Simulation&)> trigger;
+    std::function<std::string(const Simulation&)> prompt;
+};
 class Simulation {
 public:
     World world;
     Player player;
-    Vehicle car;
+    std::vector<Vehicle> vehicles;
     std::vector<Npc> npcs = std::vector<Npc>(1); // exactly one through V0.3
+    int drivenVehicle = -1; // index into vehicles while Driving, -1 otherwise
     Mode mode = Mode::OnFoot;
     Progress progress;
     std::string notice;
@@ -76,15 +90,20 @@ public:
     // and while sprint input is actually moving the player.
     bool justLanded = false, sprinting = false;
 
+    Simulation();
     void reset();
     void step(const Input& input, float dt);
     void interact();
     std::string prompt() const;
-    bool freePosition(Vec2 p, float radius, bool interior, bool vehicle = false) const;
+    bool freePosition(Vec2 p, float radius, bool interior, int selfVehicle = -1) const;
     Vec2 focus() const;
+    Vehicle* driven();
+    const Vehicle* driven() const;
 private:
-    bool canEnterCar() const;
-    bool move(Vec2& p, Vec2 delta, float radius, bool interior, bool vehicle = false);
+    bool canEnterCar(const Vehicle& v) const;
+    void enterVehicle(std::size_t i);
+    std::vector<Interactable> interactables() const;
+    bool move(Vec2& p, Vec2 delta, float radius, bool interior, int selfVehicle = -1);
     void updateNpcs(float dt);
     void say(const std::string& text);
 };

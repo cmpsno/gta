@@ -58,84 +58,143 @@ World::World() {
     room = {{-10,0,1,20,5,0}, {10,0,1,20,5,0}, {0,-10,21,1,5,0},
             {0,10,21,1,5,0}, {-5,-5,3,2,1.4f,1}, {5,-4,3,6,1,2}};
 }
+Simulation::Simulation() {
+    // V0.3: the second car is pure data registration -- no new interaction
+    // code was needed to make it enterable. Parked clear of the NPC route
+    // and the studio door.
+    vehicles.resize(2);
+    vehicles[1].position = {-14, -46};
+    vehicles[1].yaw = Pi/2;
+}
 void Simulation::reset() { *this = Simulation{}; }
 void Simulation::say(const std::string& text) { notice=text; noticeTime=3; }
-Vec2 Simulation::focus() const { return mode == Mode::Driving ? car.position : player.position; }
-bool Simulation::freePosition(Vec2 p, float r, bool interior, bool vehicle) const {
+Vehicle* Simulation::driven() { return drivenVehicle >= 0 ? &vehicles[drivenVehicle] : nullptr; }
+const Vehicle* Simulation::driven() const { return drivenVehicle >= 0 ? &vehicles[drivenVehicle] : nullptr; }
+Vec2 Simulation::focus() const { return mode == Mode::Driving ? driven()->position : player.position; }
+bool Simulation::freePosition(Vec2 p, float r, bool interior, int selfVehicle) const {
     float bound = interior ? 10.0f : World::Limit;
     if (p.x-r < -bound || p.x+r > bound || p.z-r < -bound || p.z+r > bound) return false;
-    if (vehicle && p.x+r > World::WaterEdge-2) return false;
+    if (selfVehicle >= 0 && p.x+r > World::WaterEdge-2) return false;
     for (const auto& b : interior ? world.room : world.buildings)
         if (overlaps(p,r,b)) return false;
-    // The parked car remains a physical object while the player is on foot.
-    if (!vehicle && !interior && length(p-car.position) < r+Vehicle::Radius) return false;
+    // Every parked car is a physical object; a moving vehicle skips only itself.
+    if (!interior) for (std::size_t i=0;i<vehicles.size();++i)
+        if (static_cast<int>(i) != selfVehicle && length(p-vehicles[i].position) < r+Vehicle::Radius) return false;
     return true;
 }
-bool Simulation::move(Vec2& p, Vec2 delta, float radius, bool interior, bool vehicle) {
+bool Simulation::move(Vec2& p, Vec2 delta, float radius, bool interior, int selfVehicle) {
     // Short, axis-separated steps prevent tunneling and allow sliding along walls.
     int count = std::max(1, static_cast<int>(std::ceil(length(delta)/0.12f)));
     Vec2 d = delta*(1.0f/static_cast<float>(count));
     bool hit = false;
     for (int i=0; i<count; ++i) {
         Vec2 next{p.x+d.x,p.z};
-        if (freePosition(next,radius,interior,vehicle)) p=next; else hit=true;
+        if (freePosition(next,radius,interior,selfVehicle)) p=next; else hit=true;
         next={p.x,p.z+d.z};
-        if (freePosition(next,radius,interior,vehicle)) p=next; else hit=true;
+        if (freePosition(next,radius,interior,selfVehicle)) p=next; else hit=true;
     }
     return hit;
 }
-bool Simulation::canEnterCar() const {
-    if (mode!=Mode::OnFoot || player.swimming || player.height>0.05f || length(player.position-car.position)>=4.5f) return false;
+bool Simulation::canEnterCar(const Vehicle& v) const {
+    if (mode!=Mode::OnFoot || player.swimming || player.height>0.05f || length(player.position-v.position)>=4.5f) return false;
     // Proximity alone is insufficient when a building corner lies between us.
     for (int i=0;i<=30;++i) {
-        Vec2 p=player.position+(car.position-player.position)*(i/30.0f);
+        Vec2 p=player.position+(v.position-player.position)*(i/30.0f);
         for (const Box& b : world.buildings) if (overlaps(p,0.1f,b)) return false;
     }
     return true;
 }
+void Simulation::enterVehicle(std::size_t i) {
+    mode=Mode::Driving; drivenVehicle=static_cast<int>(i);
+    player.position=vehicles[i].position;
+    progress.enteredCar=true;
+    say("W / S to accelerate and reverse. Space to brake.");
+}
+std::vector<Interactable> Simulation::interactables() const {
+    // Registration order is priority order: vehicles, then studio, then NPC.
+    std::vector<Interactable> out;
+    if (mode == Mode::Interior) {
+        out.push_back({[this]{ return world.roomExit; }, 2.4f,
+            [](const Simulation&){ return true; },
+            [](Simulation& s){
+                Vec2 offsets[]={{0,1.5f},{-3.5f,1.5f},{3.5f,1.5f},{0,5.0f}};
+                for (Vec2 offset : offsets) {
+                    Vec2 exit=s.world.entrance+offset;
+                    if (!s.freePosition(exit,0.45f,false)) continue;
+                    s.player.position=exit; s.mode=Mode::OnFoot;
+                    s.player.yaw=0; s.say("Welcome back to Palm District."); return;
+                }
+                s.say("The street exit is blocked. Reset with R to return to spawn.");
+            },
+            [](const Simulation&){ return "E  /  Return to street"; }});
+        return out;
+    }
+    if (mode != Mode::OnFoot) return out;
+    for (std::size_t i=0;i<vehicles.size();++i) {
+        out.push_back({[this,i]{ return vehicles[i].position; }, 4.5f,
+            [i](const Simulation& s){ return s.canEnterCar(s.vehicles[i]); },
+            [i](Simulation& s){ s.enterVehicle(i); },
+            [](const Simulation&){ return "E  /  Enter vehicle"; }});
+    }
+    out.push_back({[this]{ return world.entrance; }, 2.8f,
+        [](const Simulation&){ return true; },
+        [](Simulation& s){
+            s.mode=Mode::Interior; s.player.position={0,6.5f}; s.player.yaw=Pi;
+            s.progress.visitedRoom=true; s.say("Studio interior. The mint door leads outside.");
+        },
+        [](const Simulation&){ return "E  /  Enter the studio"; }});
+    if (!npcs.empty()) {
+        out.push_back({[this]{ return npcs[0].position; }, 2.2f,
+            [](const Simulation&){ return true; },
+            [](Simulation& s){
+                // V0.3 light touch: the pedestrian acknowledges the player.
+                // Dialogue trees wait for a later milestone.
+                Npc& n=s.npcs[0];
+                Vec2 to=s.player.position-n.position;
+                n.yaw=std::atan2(to.x,to.z);
+                n.state=NpcState::Idle; n.idleTimer=2.0f;
+                s.say("The pedestrian nods hello.");
+            },
+            [](const Simulation&){ return "E  /  Greet pedestrian"; }});
+    }
+    return out;
+}
 std::string Simulation::prompt() const {
-    if (mode == Mode::Driving) return std::abs(car.speed) < 1 ? "E  /  Leave vehicle" : "Brake to exit";
-    if (mode == Mode::Interior)
-        return length(player.position-world.roomExit) < 2.4f ? "E  /  Return to street" : "Explore the room. Exit at the mint door.";
+    if (mode == Mode::Driving) {
+        const Vehicle* v=driven();
+        return (v && std::abs(v->speed) < 1) ? "E  /  Leave vehicle" : "Brake to exit";
+    }
     if (player.swimming) return "Swim toward the beach to return to shore";
-    if (canEnterCar()) return "E  /  Enter vehicle";
-    if (length(player.position-world.entrance) < 2.8f) return "E  /  Enter the studio";
+    for (const auto& it : interactables()) {
+        if (length(player.position-it.position()) > it.radius) continue;
+        if (!it.eligible(*this)) continue;
+        return it.prompt(*this);
+    }
+    if (mode == Mode::Interior)
+        return "Explore the room. Exit at the mint door.";
     return "Explore freely. Find the car, studio, and waterfront.";
 }
 void Simulation::interact() {
     if (mode == Mode::Driving) {
-        if (std::abs(car.speed) >= 1) { say("Stop the car before getting out."); return; }
-        Vec2 f=forward(car.yaw), right{f.z,-f.x};
+        Vehicle& v=*driven();
+        if (std::abs(v.speed) >= 1) { say("Stop the car before getting out."); return; }
+        Vec2 f=forward(v.yaw), right{f.z,-f.x};
         // Prefer the driver's side, then try other sides. Never exit inside a wall.
-        Vec2 exits[] = {car.position-right*3.5f,car.position+right*3.5f,
-                        car.position-f*3.8f,car.position+f*3.8f};
+        Vec2 exits[] = {v.position-right*3.5f,v.position+right*3.5f,
+                        v.position-f*3.8f,v.position+f*3.8f};
         for (Vec2 p : exits) if (p.x < World::WaterEdge && freePosition(p,0.45f,false)) {
             player.position=p; player.height=0; player.verticalSpeed=0;
-            player.swimming=false; mode=Mode::OnFoot; car.speed=0;
+            player.swimming=false; mode=Mode::OnFoot; drivenVehicle=-1; v.speed=0;
             say("Back on foot."); return;
         }
         say("No room to exit. Move the car into an open space."); return;
     }
     if (player.height > 0.05f || player.swimming) return;
-    if (mode == Mode::Interior) {
-        if (length(player.position-world.roomExit) < 2.4f) {
-            Vec2 offsets[]={{0,1.5f},{-3.5f,1.5f},{3.5f,1.5f},{0,5.0f}};
-            for (Vec2 offset : offsets) {
-                Vec2 exit=world.entrance+offset;
-                if (!freePosition(exit,0.45f,false)) continue;
-                player.position=exit; mode=Mode::OnFoot;
-                player.yaw=0; say("Welcome back to Palm District."); return;
-            }
-            say("The street exit is blocked. Reset with R to return to spawn.");
-        }
+    for (const auto& it : interactables()) {
+        if (length(player.position-it.position()) > it.radius) continue;
+        if (!it.eligible(*this)) continue;
+        it.trigger(*this);
         return;
-    }
-    if (canEnterCar()) {
-        mode=Mode::Driving; player.position=car.position; progress.enteredCar=true;
-        say("W / S to accelerate and reverse. Space to brake.");
-    } else if (length(player.position-world.entrance) < 2.8f) {
-        mode=Mode::Interior; player.position={0,6.5f}; player.yaw=Pi;
-        progress.visitedRoom=true; say("Studio interior. The mint door leads outside.");
     }
 }
 void Simulation::step(const Input& in, float dt) {
@@ -144,28 +203,29 @@ void Simulation::step(const Input& in, float dt) {
     time+=dt; noticeTime=std::max(0.0f,noticeTime-dt); collided=false; justLanded=false;
     if (in.interact) interact();
     if (mode == Mode::Driving) {
+        Vehicle& v=*driven();
         float throttle=std::clamp(in.throttle,-1.0f,1.0f);
         float steer=std::clamp(in.steering,-1.0f,1.0f);
-        car.steering += (steer-car.steering)*std::min(1.0f,dt*9);
+        v.steering += (steer-v.steering)*std::min(1.0f,dt*9);
         if (in.brake) {
             float reduction=30*dt;
-            car.speed=std::copysign(std::max(0.0f,std::abs(car.speed)-reduction),car.speed);
+            v.speed=std::copysign(std::max(0.0f,std::abs(v.speed)-reduction),v.speed);
         } else if (std::abs(throttle) > 0.01f) {
-            car.speed += throttle*(car.speed*throttle < 0 ? 24.0f : 12.0f)*dt;
+            v.speed += throttle*(v.speed*throttle < 0 ? 24.0f : 12.0f)*dt;
         } else {
-            car.speed *= std::exp(-0.8f*dt);
-            if (std::abs(car.speed)<0.03f) car.speed=0;
+            v.speed *= std::exp(-0.8f*dt);
+            if (std::abs(v.speed)<0.03f) v.speed=0;
         }
-        car.speed=std::clamp(car.speed,-10.0f,30.0f);
+        v.speed=std::clamp(v.speed,-10.0f,30.0f);
         // V0.1: keep the original high-speed yaw rate, but add a low-speed
         // authority term so parking-lot maneuvering doesn't feel dead. The
         // Gaussian decays to ~0 by 24 m/s, leaving highway steering untouched.
-        float authority=std::abs(car.speed)*0.065f+0.9f*std::exp(-(car.speed*car.speed)/(2*8.0f*8.0f));
-        car.yaw += car.steering*(car.speed >= 0 ? 1.0f : -1.0f)*authority*dt;
-        Vec2 old=car.position;
-        collided=move(car.position,forward(car.yaw)*(car.speed*dt),Vehicle::Radius,false,true);
-        if (collided) car.speed=0;
-        progress.driven+=length(car.position-old); player.position=car.position;
+        float authority=std::abs(v.speed)*0.065f+0.9f*std::exp(-(v.speed*v.speed)/(2*8.0f*8.0f));
+        v.yaw += v.steering*(v.speed >= 0 ? 1.0f : -1.0f)*authority*dt;
+        Vec2 old=v.position;
+        collided=move(v.position,forward(v.yaw)*(v.speed*dt),Vehicle::Radius,false,drivenVehicle);
+        if (collided) v.speed=0;
+        progress.driven+=length(v.position-old); player.position=v.position;
         updateNpcs(dt);
         return;
     }

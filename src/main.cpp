@@ -86,7 +86,7 @@ int main(int argc,char** argv) {
                 sim.step(input,FixedStep);
                 if (oldMode!=sim.mode) {
                     if (sim.mode==Mode::Interior) view.yaw=Pi;
-                    if (sim.mode==Mode::Driving) view.yaw=sim.car.yaw;
+                    if (sim.mode==Mode::Driving) view.yaw=sim.driven()->yaw;
                     updateCamera(view,sim,FixedStep,true);
                 }
                 pendingJump=false;pendingInteract=false;

@@ -167,7 +167,9 @@ void exterior(const Simulation& s,const View& v) {
     }
     // Shoreline reads as a continuous, walkable transition into shallow water.
     cube({74.2f,0.012f,0},0.4f,0.025f,208,{205,227,201,255});
-    carModel(s.car,s.time,s.mode==Mode::Driving);
+    // V0.3: every registered vehicle renders; the driven one hides its marker.
+    const Vehicle* occupied=s.driven();
+    for (const auto& veh : s.vehicles) carModel(veh,s.time,&veh==occupied);
     for (const auto& n : s.npcs) npcModel(n,s.time);
 }
 void interior(const Simulation& s) {
@@ -201,7 +203,9 @@ void minimap(const Simulation& s,const View& v,float x,float y,float size) {
         DrawRectangleV(a,{b.width*scale,b.depth*scale},{201,195,169,255});
     }
     Vector2 door=at(s.world.entrance); DrawCircleV(door,3.5f,Mint);
-    Vector2 car=at(s.car.position); DrawRectangleV({car.x-3,car.y-3},{6,6},{234,137,103,255});
+    for (const auto& veh : s.vehicles) {
+        Vector2 dot=at(veh.position); DrawRectangleV({dot.x-3,dot.y-3},{6,6},{234,137,103,255});
+    }
     for (const auto& n : s.npcs) { Vector2 d=at(n.position); DrawCircleV(d,2.5f,{196,118,92,255}); }
     Vec2 pos=s.mode==Mode::Interior ? s.world.entrance : s.focus();
     Vector2 p=at(pos); Vec2 f=forward(s.mode==Mode::Driving ? s.car.yaw : s.player.yaw);
@@ -238,7 +242,9 @@ void updateCamera(View& v,const Simulation& s,float dt,bool snap) {
     v.camera.target = snap ? target : Vector3Lerp(v.camera.target,target,1-std::exp(-14*dt));
     v.camera.position=desired;
     v.camera.up={0,1,0};
-    v.camera.fovy=s.mode==Mode::Driving ? 65.0f+std::min(9.0f,std::abs(s.car.speed)*0.28f)
+    const Vehicle* moving=s.driven();
+    float speedKmh=moving ? std::abs(moving->speed) : 0;
+    v.camera.fovy=s.mode==Mode::Driving ? 65.0f+std::min(9.0f,speedKmh*0.28f)
                                         : 58.0f+(s.sprinting ? 4.0f : 0.0f);
     v.camera.projection=CAMERA_PERSPECTIVE;
 }
@@ -268,7 +274,8 @@ void drawHud(const Simulation& s,const View& v) {
     panel({w-265,h-233,235,203},Fade(Ink,0.94f));
     text(v,label,w-246,h-215,15,Mint);
     if (s.mode==Mode::Driving) {
-        text(v,std::to_string(static_cast<int>(std::abs(s.car.speed)*3.6f)),w-247,h-189,46,Paper);
+        const Vehicle* d=s.driven();
+        text(v,std::to_string(static_cast<int>(std::abs(d ? d->speed : 0)*3.6f)),w-247,h-189,46,Paper);
         text(v,"KM/H",w-158,h-164,14,Paper);
     } else {
         text(v,std::to_string(s.progress.completed())+" / 6",w-246,h-187,38,Paper);
