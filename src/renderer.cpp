@@ -93,6 +93,20 @@ void playerModel(const Player& p,float time,bool moving) {
     }
     rlPopMatrix();
 }
+void npcModel(const Npc& n,float time) {
+    // V0.2: same primitive visual language as the player, terracotta so the
+    // pedestrian reads as a different actor at a glance.
+    rlPushMatrix();
+    rlTranslatef(n.position.x,0,n.position.z);
+    rlRotatef(n.yaw*RAD2DEG,0,1,0);
+    float bob=n.state==NpcState::Walking ? std::abs(std::sin(time*9))*0.06f : 0;
+    cube({0,0.95f+bob,0},0.62f,0.95f,0.36f,{196,118,92,255});
+    cube({0,1.68f+bob,0},0.40f,0.40f,0.40f,{193,144,109,255});
+    cube({0,1.90f+bob,-0.02f},0.42f,0.12f,0.42f,Ink);
+    for (float side : {-1.0f,1.0f})
+        cube({side*0.18f,0.30f,0},0.22f,0.60f,0.26f,{58,72,84,255});
+    rlPopMatrix();
+}
 void exterior(const Simulation& s,const View& v) {
     cube({0,-0.32f,0},208,0.6f,208,Sand);
     cube({-16,-0.02f,0},176,0.06f,208,{173,185,155,255});
@@ -154,6 +168,7 @@ void exterior(const Simulation& s,const View& v) {
     // Shoreline reads as a continuous, walkable transition into shallow water.
     cube({74.2f,0.012f,0},0.4f,0.025f,208,{205,227,201,255});
     carModel(s.car,s.time,s.mode==Mode::Driving);
+    for (const auto& n : s.npcs) npcModel(n,s.time);
 }
 void interior(const Simulation& s) {
     cube({0,-0.15f,0},21,0.3f,21,{200,180,146,255});
@@ -187,6 +202,7 @@ void minimap(const Simulation& s,const View& v,float x,float y,float size) {
     }
     Vector2 door=at(s.world.entrance); DrawCircleV(door,3.5f,Mint);
     Vector2 car=at(s.car.position); DrawRectangleV({car.x-3,car.y-3},{6,6},{234,137,103,255});
+    for (const auto& n : s.npcs) { Vector2 d=at(n.position); DrawCircleV(d,2.5f,{196,118,92,255}); }
     Vec2 pos=s.mode==Mode::Interior ? s.world.entrance : s.focus();
     Vector2 p=at(pos); Vec2 f=forward(s.mode==Mode::Driving ? s.car.yaw : s.player.yaw);
     Vector2 tip{p.x+f.x*7,p.y+f.z*7},left{p.x-f.x*4+f.z*4,p.y-f.z*4-f.x*4},right{p.x-f.x*4-f.z*4,p.y-f.z*4+f.x*4};

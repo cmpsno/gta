@@ -28,6 +28,20 @@ struct Vehicle {
     float yaw = Pi, speed = 0, steering = 0;
     static constexpr float Radius = 2.45f;
 };
+// V0.2: one independently-owned pedestrian. Position, facing, speed, route
+// progress, and behavior state live here so N NPCs can act independently
+// (V0.4 stress test reuses this struct directly).
+enum class NpcState { Idle, Walking };
+struct Npc {
+    Vec2 position{8, -40};
+    float yaw = 0;
+    std::size_t waypoint = 1; // index into npcRoute() of the current target
+    NpcState state = NpcState::Walking;
+    float idleTimer = 0;
+    float speed = 1.6f;
+};
+// Hardcoded sidewalk loop on the existing street grid; no nav layer yet.
+const std::vector<Vec2>& npcRoute();
 struct Input {
     Vec2 movement{}; // World-space direction, derived from camera in main.cpp.
     float throttle = 0, steering = 0;
@@ -52,6 +66,7 @@ public:
     World world;
     Player player;
     Vehicle car;
+    std::vector<Npc> npcs = std::vector<Npc>(1); // exactly one through V0.3
     Mode mode = Mode::OnFoot;
     Progress progress;
     std::string notice;
@@ -70,6 +85,7 @@ public:
 private:
     bool canEnterCar() const;
     bool move(Vec2& p, Vec2 delta, float radius, bool interior, bool vehicle = false);
+    void updateNpcs(float dt);
     void say(const std::string& text);
 };
 } // namespace palm

@@ -17,6 +17,34 @@ bool overlaps(Vec2 p, float r, const Box& b) {
 int Progress::completed() const {
     return (walked >= 20) + jumped + enteredCar + (driven >= 80) + visitedRoom + swam;
 }
+// Sidewalk loop around the central block: x=±8 rides the edge of the north-
+// south road at x=0, z=±40 crosses between buildings. All four points and
+// every segment were checked against World::buildings by hand.
+const std::vector<Vec2>& npcRoute() {
+    static const std::vector<Vec2> route{{8,-40},{8,40},{-8,40},{-8,-40}};
+    return route;
+}
+void Simulation::updateNpcs(float dt) {
+    const auto& route = npcRoute();
+    for (auto& n : npcs) {
+        if (n.state == NpcState::Idle) {
+            n.idleTimer -= dt;
+            if (n.idleTimer <= 0) {
+                n.waypoint = (n.waypoint+1) % route.size();
+                n.state = NpcState::Walking;
+            }
+            continue;
+        }
+        Vec2 target = route[n.waypoint % route.size()];
+        Vec2 to = target - n.position;
+        if (length(to) < 0.6f) { n.state = NpcState::Idle; n.idleTimer = 2.5f; continue; }
+        Vec2 dir = normalized(to);
+        n.yaw = std::atan2(dir.x, dir.z);
+        // Same axis-separated step-and-resolve path as the player: one
+        // collision implementation for every walker.
+        move(n.position, dir*(n.speed*dt), 0.45f, false);
+    }
+}
 World::World() {
     // A finite, hand-authored neighborhood. Every building is also a collider.
     buildings = {
@@ -138,6 +166,7 @@ void Simulation::step(const Input& in, float dt) {
         collided=move(car.position,forward(car.yaw)*(car.speed*dt),Vehicle::Radius,false,true);
         if (collided) car.speed=0;
         progress.driven+=length(car.position-old); player.position=car.position;
+        updateNpcs(dt);
         return;
     }
     bool interior=mode==Mode::Interior;
@@ -162,5 +191,6 @@ void Simulation::step(const Input& in, float dt) {
     }
     player.swimming=!interior && player.position.x > World::WaterEdge && player.height<=0;
     if (player.swimming) progress.swam=true;
+    updateNpcs(dt);
 }
 } // namespace palm
