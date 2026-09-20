@@ -99,6 +99,12 @@ public:
     Vec2 focus() const;
     Vehicle* driven();
     const Vehicle* driven() const;
+    // V0.4: replace the shipped single NPC with N stress walkers distributed
+    // along the route. Measurement-only; the game still ships one NPC.
+    void setStressNpcs(int n);
+    // V0.4: box-overlap tests performed by the last step(); read by the
+    // debug overlay and the headless benchmark.
+    mutable long collisionChecks = 0;
 private:
     bool canEnterCar(const Vehicle& v) const;
     void enterVehicle(std::size_t i);

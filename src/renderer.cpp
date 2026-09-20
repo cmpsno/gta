@@ -208,7 +208,7 @@ void minimap(const Simulation& s,const View& v,float x,float y,float size) {
     }
     for (const auto& n : s.npcs) { Vector2 d=at(n.position); DrawCircleV(d,2.5f,{196,118,92,255}); }
     Vec2 pos=s.mode==Mode::Interior ? s.world.entrance : s.focus();
-    Vector2 p=at(pos); Vec2 f=forward(s.mode==Mode::Driving ? s.car.yaw : s.player.yaw);
+    Vector2 p=at(pos); Vec2 f=forward(s.mode==Mode::Driving && s.driven() ? s.driven()->yaw : s.player.yaw);
     Vector2 tip{p.x+f.x*7,p.y+f.z*7},left{p.x-f.x*4+f.z*4,p.y-f.z*4-f.x*4},right{p.x-f.x*4-f.z*4,p.y-f.z*4+f.x*4};
     DrawTriangle(tip,left,right,Paper); DrawCircleV(p,2,Paper);
     text(v,"N",x+size-13,y+4,15,Paper);
@@ -267,7 +267,7 @@ void drawHud(const Simulation& s,const View& v) {
     text(v,"PALM DISTRICT",30,24,32,Ink);
     text(v,s.mode==Mode::Interior ? "THE STUDIO  /  INTERIOR" : "COASTAL SANDBOX  /  FREE ROAM",32,61,14,Ink);
     panel({w-195,25,165,36},Fade(Ink,0.93f));
-    text(v,"V0.1  /  C++",w-176,34,17,Mint);
+    text(v,"V0.4  /  C++",w-176,34,17,Mint);
     text(v,std::to_string(GetFPS())+" FPS",w-95,72,14,Ink);
     minimap(s,v,40,h-235,170);
     const char* label=s.mode==Mode::Driving ? "DRIVING" : s.mode==Mode::Interior ? "IN THE STUDIO" : s.player.swimming ? "SWIMMING" : "ON FOOT";
@@ -300,6 +300,9 @@ void drawHud(const Simulation& s,const View& v) {
     if (v.debug) {
         Vec2 p=s.focus();
         text(v,TextFormat("x %.1f   z %.1f   height %.2f   collision %s",p.x,p.z,s.player.height,s.collided?"yes":"no"),w/2-210,28,17,Ink);
+        // V0.4: frame-time and object-count instrumentation on the F3 overlay.
+        text(v,TextFormat("frame %.2f ms   sim %.2f ms   render %.2f ms",v.simMs+v.renderMs,v.simMs,v.renderMs),w/2-210,52,17,Ink);
+        text(v,TextFormat("npcs %d   vehicles %d   box checks/step %ld",static_cast<int>(s.npcs.size()),static_cast<int>(s.vehicles.size()),s.collisionChecks),w/2-210,76,17,Ink);
     }
     if (v.paused || v.welcome) {
         DrawRectangle(0,0,static_cast<int>(w),static_cast<int>(h),Fade(Ink,0.48f));

@@ -1,5 +1,6 @@
 #include "renderer.h"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <iostream>
 #include <string>
@@ -7,13 +8,15 @@
 int main(int argc,char** argv) {
     using namespace palm;
     bool smoke=false;
+    int stressNpcs=0; // V0.4: spawn N NPCs for render-side stress measurement
     std::string capture,scene="street";
     for (int i=1;i<argc;++i) {
         std::string arg=argv[i];
         if (arg=="--smoke") smoke=true;
         else if (arg=="--capture" && i+1<argc) capture=argv[++i];
         else if (arg=="--scene" && i+1<argc) scene=argv[++i];
-        else { std::cerr<<"Usage: palm_district [--smoke] [--capture path.png] [--scene street|studio|water|drive|welcome]\n"; return 2; }
+        else if (arg=="--npcs" && i+1<argc) stressNpcs=std::stoi(argv[++i]);
+        else { std::cerr<<"Usage: palm_district [--smoke] [--capture path.png] [--scene street|studio|water|drive|welcome] [--npcs N]\n"; return 2; }
     }
     if (scene!="street" && scene!="studio" && scene!="water" && scene!="drive" && scene!="welcome") return 2;
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE | (smoke ? FLAG_WINDOW_HIDDEN : FLAG_VSYNC_HINT));
@@ -24,6 +27,7 @@ int main(int argc,char** argv) {
     SetExitKey(KEY_NULL);
     SetTargetFPS(smoke ? 0 : 120);
     Simulation sim;
+    if (stressNpcs>0) sim.setStressNpcs(stressNpcs);
     View view;
     view.font=GetFontDefault();
     // Use a local system font when present; no font assets are redistributed.
@@ -42,7 +46,9 @@ int main(int argc,char** argv) {
     float accumulator=0;
     bool pendingJump=false,pendingInteract=false,quit=false;
     int frames=0;
+    double frameAccumMs=0; // V0.4: mean frame time over a smoke run
     while (!WindowShouldClose() && !quit) {
+        auto frameStart=std::chrono::steady_clock::now();
         float dt=smoke ? 1.0f/60.0f : std::min(GetFrameTime(),0.1f);
         if (!smoke && !IsWindowFocused() && !view.welcome) {view.paused=true;EnableCursor();}
         if (IsKeyPressed(KEY_ESCAPE)) {
@@ -94,10 +100,19 @@ int main(int argc,char** argv) {
             }
             updateCamera(view,sim,dt);
         }
+        auto simEnd=std::chrono::steady_clock::now();
         BeginDrawing();
         drawScene(sim,view);drawHud(sim,view);
         EndDrawing();
+        auto frameEnd=std::chrono::steady_clock::now();
+        // V0.4: split frame time into simulation vs render; EMA for the
+        // debug overlay, exact mean for smoke runs.
+        double simPart=std::chrono::duration<double,std::milli>(simEnd-frameStart).count();
+        double renderPart=std::chrono::duration<double,std::milli>(frameEnd-simEnd).count();
+        view.simMs+=(simPart-view.simMs)*0.08;
+        view.renderMs+=(renderPart-view.renderMs)*0.08;
         ++frames;
+        frameAccumMs+=simPart+renderPart;
         if (smoke && frames==120) {
             if (!capture.empty()) {
                 Image screenshot=LoadImageFromScreen();
@@ -109,7 +124,8 @@ int main(int argc,char** argv) {
                     CloseWindow();return 1;
                 }
             }
-            std::cout<<"Render smoke passed: "<<scene<<", "<<frames<<" frames, mode "<<static_cast<int>(sim.mode)<<"\n";
+            std::cout<<"Render smoke passed: "<<scene<<", "<<frames<<" frames, mode "<<static_cast<int>(sim.mode)
+                     <<", npcs "<<sim.npcs.size()<<", avg frame "<<frameAccumMs/frames<<" ms\n";
             quit=true;
         }
     }

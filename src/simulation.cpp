@@ -24,6 +24,28 @@ const std::vector<Vec2>& npcRoute() {
     static const std::vector<Vec2> route{{8,-40},{8,40},{-8,40},{-8,-40}};
     return route;
 }
+void Simulation::setStressNpcs(int n) {
+    npcs.clear();
+    npcs.reserve(n > 0 ? static_cast<std::size_t>(n) : 0);
+    const auto& route = npcRoute();
+    float total = 0;
+    for (std::size_t i=0;i<route.size();++i) total += length(route[(i+1)%route.size()]-route[i]);
+    for (int k=0;k<n;++k) {
+        // Deterministic even spacing along the loop perimeter.
+        float d = total * static_cast<float>(k) / static_cast<float>(n);
+        std::size_t seg = 0;
+        float segLen = length(route[1]-route[0]);
+        while (d > segLen && seg+1 < route.size()) { d -= segLen; ++seg; segLen = length(route[(seg+1)%route.size()]-route[seg]); }
+        Vec2 a = route[seg], b = route[(seg+1)%route.size()];
+        Vec2 dir = normalized(b-a);
+        Npc npc;
+        npc.position = a+dir*d;
+        npc.waypoint = (seg+1) % route.size();
+        npc.yaw = std::atan2(dir.x, dir.z);
+        npc.speed = 1.4f + static_cast<float>(k % 5)*0.1f;
+        npcs.push_back(npc);
+    }
+}
 void Simulation::updateNpcs(float dt) {
     const auto& route = npcRoute();
     for (auto& n : npcs) {
@@ -75,8 +97,10 @@ bool Simulation::freePosition(Vec2 p, float r, bool interior, int selfVehicle) c
     float bound = interior ? 10.0f : World::Limit;
     if (p.x-r < -bound || p.x+r > bound || p.z-r < -bound || p.z+r > bound) return false;
     if (selfVehicle >= 0 && p.x+r > World::WaterEdge-2) return false;
-    for (const auto& b : interior ? world.room : world.buildings)
+    for (const auto& b : interior ? world.room : world.buildings) {
+        ++collisionChecks;
         if (overlaps(p,r,b)) return false;
+    }
     // Every parked car is a physical object; a moving vehicle skips only itself.
     if (!interior) for (std::size_t i=0;i<vehicles.size();++i)
         if (static_cast<int>(i) != selfVehicle && length(p-vehicles[i].position) < r+Vehicle::Radius) return false;
@@ -201,6 +225,7 @@ void Simulation::step(const Input& in, float dt) {
     if (!std::isfinite(dt) || dt <= 0) return;
     dt=std::min(dt,0.1f);
     time+=dt; noticeTime=std::max(0.0f,noticeTime-dt); collided=false; justLanded=false;
+    collisionChecks=0;
     if (in.interact) interact();
     if (mode == Mode::Driving) {
         Vehicle& v=*driven();
