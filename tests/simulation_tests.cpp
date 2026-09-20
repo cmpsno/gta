@@ -91,6 +91,15 @@ int main() {
         Vec2 old=a.player.position;a.step(walk,std::numeric_limits<float>::quiet_NaN());a.step(walk,-1);
         near(length(a.player.position-old),0,0.001f,"Invalid time does not corrupt state");
         s.reset();check(s.mode==Mode::OnFoot && s.progress.completed()==0,"Reset restores fresh sandbox");
+        // V0.1 feel flags: landing feedback fires once per jump; sprinting tracks input.
+        s.reset();Input hj;hj.jump=true;s.step(hj,FixedStep);
+        bool sawLanding=false;
+        for (int i=0;i<120;++i) {s.step({},FixedStep);if (s.justLanded) sawLanding=true;}
+        check(sawLanding,"Landing a jump flags one frame of feedback");
+        s.reset();walk={};walk.movement={0,1};walk.sprint=true;s.step(walk,FixedStep);
+        check(s.sprinting,"Sprint input while moving flags sprinting");
+        walk.sprint=false;s.step(walk,FixedStep);
+        check(!s.sprinting,"Releasing sprint clears the flag");
         std::cout<<"PASS: "<<assertions<<" mechanics assertions\n";return 0;
     } catch(const std::exception& e) {std::cerr<<"FAIL: "<<e.what()<<"\n";return 1;}
 }

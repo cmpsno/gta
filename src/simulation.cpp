@@ -113,7 +113,7 @@ void Simulation::interact() {
 void Simulation::step(const Input& in, float dt) {
     if (!std::isfinite(dt) || dt <= 0) return;
     dt=std::min(dt,0.1f);
-    time+=dt; noticeTime=std::max(0.0f,noticeTime-dt); collided=false;
+    time+=dt; noticeTime=std::max(0.0f,noticeTime-dt); collided=false; justLanded=false;
     if (in.interact) interact();
     if (mode == Mode::Driving) {
         float throttle=std::clamp(in.throttle,-1.0f,1.0f);
@@ -129,7 +129,11 @@ void Simulation::step(const Input& in, float dt) {
             if (std::abs(car.speed)<0.03f) car.speed=0;
         }
         car.speed=std::clamp(car.speed,-10.0f,30.0f);
-        car.yaw += car.steering*car.speed*0.065f*dt;
+        // V0.1: keep the original high-speed yaw rate, but add a low-speed
+        // authority term so parking-lot maneuvering doesn't feel dead. The
+        // Gaussian decays to ~0 by 24 m/s, leaving highway steering untouched.
+        float authority=std::abs(car.speed)*0.065f+0.9f*std::exp(-(car.speed*car.speed)/(2*8.0f*8.0f));
+        car.yaw += car.steering*(car.speed >= 0 ? 1.0f : -1.0f)*authority*dt;
         Vec2 old=car.position;
         collided=move(car.position,forward(car.yaw)*(car.speed*dt),Vehicle::Radius,false,true);
         if (collided) car.speed=0;
@@ -139,6 +143,7 @@ void Simulation::step(const Input& in, float dt) {
     bool interior=mode==Mode::Interior;
     player.swimming=!interior && player.position.x > World::WaterEdge && player.height <= 0;
     Vec2 direction=length(in.movement)>1 ? normalized(in.movement) : in.movement;
+    sprinting = in.sprint && length(direction) > 0.01f && !player.swimming;
     float speed=player.swimming ? 3.0f : (in.sprint ? 9.0f : 4.5f);
     Vec2 old=player.position;
     collided=move(player.position,direction*(speed*dt),0.45f,interior);
@@ -149,7 +154,12 @@ void Simulation::step(const Input& in, float dt) {
     }
     player.verticalSpeed-=20*dt;
     player.height=std::max(0.0f,player.height+player.verticalSpeed*dt);
-    if (player.height<=0) player.verticalSpeed=0;
+    if (player.height<=0) {
+        // V0.1: a real fall (not a step or a swim stroke) flags one frame of
+        // landing feedback for the renderer.
+        if (player.verticalSpeed < -3.5f) justLanded=true;
+        player.verticalSpeed=0;
+    }
     player.swimming=!interior && player.position.x > World::WaterEdge && player.height<=0;
     if (player.swimming) progress.swam=true;
 }

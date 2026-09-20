@@ -210,10 +210,20 @@ void updateCamera(View& v,const Simulation& s,float dt,bool snap) {
         if (hit.hit && hit.distance<nearest) nearest=std::max(0.4f,hit.distance-0.3f);
     }
     desired=Vector3Add(target,Vector3Scale(ray.direction,nearest));
+    // V0.1 feel: a one-frame landing flag becomes a short shake; sprint and
+    // speed widen the FOV slightly. Both decay/are derived, never stored in sim.
+    if (s.justLanded) v.shake=1.0f;
+    v.shake*=std::exp(-7.0f*dt);
+    if (v.shake>0.003f) {
+        desired.x+=std::sin(s.time*91.0f)*0.14f*v.shake;
+        desired.y+=std::abs(std::sin(s.time*73.0f))*0.11f*v.shake;
+    }
     // Collision correction is immediate; only target following is smoothed.
     v.camera.target = snap ? target : Vector3Lerp(v.camera.target,target,1-std::exp(-14*dt));
     v.camera.position=desired;
-    v.camera.up={0,1,0}; v.camera.fovy=s.mode==Mode::Driving ? 65.0f : 58.0f;
+    v.camera.up={0,1,0};
+    v.camera.fovy=s.mode==Mode::Driving ? 65.0f+std::min(9.0f,std::abs(s.car.speed)*0.28f)
+                                        : 58.0f+(s.sprinting ? 4.0f : 0.0f);
     v.camera.projection=CAMERA_PERSPECTIVE;
 }
 void drawScene(const Simulation& s,const View& v) {

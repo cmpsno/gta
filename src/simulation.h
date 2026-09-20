@@ -57,6 +57,9 @@ public:
     std::string notice;
     float noticeTime = 0, time = 0;
     bool collided = false;
+    // V0.1 feel feedback: set for one step when the player lands a jump,
+    // and while sprint input is actually moving the player.
+    bool justLanded = false, sprinting = false;
 
     void reset();
     void step(const Input& input, float dt);
