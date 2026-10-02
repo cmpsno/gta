@@ -9,11 +9,6 @@ Vec2 operator*(Vec2 a, float s) { return {a.x*s, a.z*s}; }
 float length(Vec2 v) { return std::sqrt(v.x*v.x+v.z*v.z); }
 Vec2 normalized(Vec2 v) { float n = length(v); return n > 0.0001f ? v*(1/n) : Vec2{}; }
 Vec2 forward(float yaw) { return {std::sin(yaw), std::cos(yaw)}; }
-bool overlaps(Vec2 p, float r, const Box& b) {
-    float x = std::clamp(p.x, b.x-b.width/2, b.x+b.width/2);
-    float z = std::clamp(p.z, b.z-b.depth/2, b.z+b.depth/2);
-    return (p.x-x)*(p.x-x)+(p.z-z)*(p.z-z) < r*r;
-}
 int Progress::completed() const {
     return (walked >= 20) + jumped + enteredCar + (driven >= 80) + visitedRoom + swam;
 }
@@ -64,21 +59,24 @@ void Simulation::updateNpcs(float dt) {
         n.yaw = std::atan2(dir.x, dir.z);
         // Same axis-separated step-and-resolve path as the player: one
         // collision implementation for every walker.
-        move(n.position, dir*(n.speed*dt), 0.45f, false);
+        Vec3 npcCenter{n.position.x, Player::Height/2, n.position.z};
+        moveBody(npcCenter, {Player::Radius, Player::Height/2, Player::Radius},
+                 dir*(n.speed*dt), false);
+        n.position = planar(npcCenter);
     }
 }
 World::World() {
     // A finite, hand-authored neighborhood. Every building is also a collider.
     buildings = {
-        {-30,-29,28,30,17,0}, {26,-25,26,28,9,1},
-        {-30,29,28,28,11,2}, {28,30,28,28,21,3},
-        {-80,-29,20,30,24,3}, {-80,29,20,28,14,1},
-        {-30,-80,28,22,27,2}, {27,-80,28,22,15,0},
-        {-80,-80,20,22,18,0}, {-80,80,20,22,22,2},
-        {-30,80,28,22,16,1}, {28,80,28,22,10,0}
+        makeBlock(-30,-29,28,30,17,0), makeBlock(26,-25,26,28,9,1),
+        makeBlock(28,30,28,28,21,3),
+        makeBlock(-80,-29,20,30,24,3), makeBlock(-80,29,20,28,14,1),
+        makeBlock(-30,-80,28,22,27,2), makeBlock(27,-80,28,22,15,0),
+        makeBlock(-80,-80,20,22,18,0), makeBlock(-80,80,20,22,22,2),
+        makeBlock(-30,80,28,22,16,1), makeBlock(28,80,28,22,10,0)
     };
-    room = {{-10,0,1,20,5,0}, {10,0,1,20,5,0}, {0,-10,21,1,5,0},
-            {0,10,21,1,5,0}, {-5,-5,3,2,1.4f,1}, {5,-4,3,6,1,2}};
+    room = {makeBlock(-10,0,1,20,5,0), makeBlock(10,0,1,20,5,0), makeBlock(0,-10,21,1,5,0),
+            makeBlock(0,10,21,1,5,0), makeBlock(-5,-5,3,2,1.4f,1), makeBlock(5,-4,3,6,1,2)};
     // The ground as an explicit slab, spanning the playable area (and the
     // interior's coordinate range). Everything reachable stands on it until
     // later tasks add raised floors.
@@ -90,6 +88,33 @@ World::World() {
         floors.push_back({{-14, 0, 20 + 2.0f * i}, {-10, top, 22 + 2.0f * i}});
     }
     floors.push_back({{-14, 0, 30}, {-10, 2.5f, 38}}); // platform
+    // Phase 1 task 7: two-floor building at (-30, 29). The solid block is
+    // replaced by a hollow shell: ground-floor walls, an interior staircase,
+    // a second-floor slab, and second-floor walls. Walls live in `buildings`
+    // (3D colliders — task 6 makes them block only the floor they're on);
+    // the slab and stairs live in `floors` (walkable, step-up climbs them).
+    // Footprint x∈[-44,-16], z∈[15,43]; wall thickness 0.6; floor height 3.
+    {
+        float x0=-44, x1=-16, z0=15, z1=43, t=0.6f, fh=3.0f;
+        int pal=2;
+        // Ground-floor walls (y 0..3).
+        buildings.push_back({{{x0,0,z0},{x1,fh,z0+t}}, pal});
+        buildings.push_back({{{x0,0,z1-t},{x1,fh,z1}}, pal});
+        buildings.push_back({{{x0,0,z0},{x0+t,fh,z1}}, pal});
+        buildings.push_back({{{x1-t,0,z0},{x1,fh,z1}}, pal});
+        // Second-floor walls (y 3..6).
+        buildings.push_back({{{x0,fh,z0},{x1,2*fh,z0+t}}, pal});
+        buildings.push_back({{{x0,fh,z1-t},{x1,2*fh,z1}}, pal});
+        buildings.push_back({{{x0,fh,z0},{x0+t,2*fh,z1}}, pal});
+        buildings.push_back({{{x1-t,fh,z0},{x1,2*fh,z1}}, pal});
+        // Second-floor slab (top at y=3), interior.
+        floors.push_back({{x0+t, fh-0.3f, z0+t}, {x1-t, fh, z1-t}});
+        // Interior staircase: six 0.5 m steps along the west wall, z 18..30.
+        for (int i=0;i<6;++i) {
+            float top=0.5f*(i+1);
+            floors.push_back({{x0+t, 0, 18+2.0f*i}, {x0+t+2.0f, top, 20+2.0f*i}});
+        }
+    }
 }
 float findFloorY(Vec3 pos, const std::vector<AABB>& floors) {
     float best = 0.0f;
@@ -123,38 +148,60 @@ void Simulation::say(const std::string& text) { notice=text; noticeTime=3; }
 Vehicle* Simulation::driven() { return drivenVehicle >= 0 ? &vehicles[drivenVehicle] : nullptr; }
 const Vehicle* Simulation::driven() const { return drivenVehicle >= 0 ? &vehicles[drivenVehicle] : nullptr; }
 Vec2 Simulation::focus() const { return mode == Mode::Driving ? planar(driven()->position) : planar(player.position); }
-bool Simulation::freePosition(Vec2 p, float r, bool interior, int selfVehicle) const {
+bool Simulation::freePosition(const AABB& body, bool interior, int selfVehicle) const {
+    // Phase 1 task 6: movers are vertical cylinders. The XZ footprint is the
+    // AABB's inscribed circle (every mover is square on XZ, and a circle is
+    // rotation-invariant for yawing bodies like the car), extruded over the
+    // AABB's Y range. A block collides only if the circle hits its footprint
+    // AND the Y ranges overlap — so a wall on an upper floor no longer
+    // blocks the ground floor, and vice versa.
+    Vec2 c{(body.min.x+body.max.x)*0.5f, (body.min.z+body.max.z)*0.5f};
+    float r = std::min(body.max.x-body.min.x, body.max.z-body.min.z)*0.5f;
+    float y0 = body.min.y, y1 = body.max.y;
     float bound = interior ? 10.0f : World::Limit;
-    if (p.x-r < -bound || p.x+r > bound || p.z-r < -bound || p.z+r > bound) return false;
-    if (selfVehicle >= 0 && p.x+r > World::WaterEdge-2) return false;
+    if (c.x-r < -bound || c.x+r > bound || c.z-r < -bound || c.z+r > bound) return false;
+    if (selfVehicle >= 0 && c.x+r > World::WaterEdge-2) return false;
     for (const auto& b : interior ? world.room : world.buildings) {
         ++collisionChecks;
-        if (overlaps(p,r,b)) return false;
+        const AABB& bb = b.bounds;
+        if (y1 <= bb.min.y || y0 >= bb.max.y) continue;
+        float x = std::clamp(c.x, bb.min.x, bb.max.x);
+        float z = std::clamp(c.z, bb.min.z, bb.max.z);
+        if ((c.x-x)*(c.x-x)+(c.z-z)*(c.z-z) < r*r) return false;
     }
     // Every parked car is a physical object; a moving vehicle skips only itself.
-    if (!interior) for (std::size_t i=0;i<vehicles.size();++i)
-        if (static_cast<int>(i) != selfVehicle && length(p-planar(vehicles[i].position)) < r+Vehicle::Radius) return false;
+    if (!interior) for (std::size_t i=0;i<vehicles.size();++i) {
+        if (static_cast<int>(i) == selfVehicle) continue;
+        const AABB ob = vehicleAABB(vehicles[i].position);
+        if (y1 <= ob.min.y || y0 >= ob.max.y) continue;
+        if (length(c-planar(vehicles[i].position)) < r+Vehicle::Radius) return false;
+    }
     return true;
 }
-bool Simulation::move(Vec2& p, Vec2 delta, float radius, bool interior, int selfVehicle) {
-    // Short, axis-separated steps prevent tunneling and allow sliding along walls.
+bool Simulation::moveBody(Vec3& center, Vec3 halfExtents, Vec2 delta, bool interior, int selfVehicle) {
+    // Short, axis-separated steps prevent tunneling and allow sliding along
+    // walls. Only X and Z step; Y is carried through and resolved by the
+    // floor/gravity system, so 3D overlap is tested on every substep.
+    auto at = [&](Vec3 c) { return AABB{c-halfExtents, c+halfExtents}; };
     int count = std::max(1, static_cast<int>(std::ceil(length(delta)/0.12f)));
     Vec2 d = delta*(1.0f/static_cast<float>(count));
     bool hit = false;
     for (int i=0; i<count; ++i) {
-        Vec2 next{p.x+d.x,p.z};
-        if (freePosition(next,radius,interior,selfVehicle)) p=next; else hit=true;
-        next={p.x,p.z+d.z};
-        if (freePosition(next,radius,interior,selfVehicle)) p=next; else hit=true;
+        Vec3 next{center.x+d.x, center.y, center.z};
+        if (freePosition(at(next),interior,selfVehicle)) center=next; else hit=true;
+        next={center.x, center.y, center.z+d.z};
+        if (freePosition(at(next),interior,selfVehicle)) center=next; else hit=true;
     }
     return hit;
 }
 bool Simulation::canEnterCar(const Vehicle& v) const {
     if (mode!=Mode::OnFoot || player.swimming || player.position.y>0.05f || length(planar(player.position)-planar(v.position))>=4.5f) return false;
     // Proximity alone is insufficient when a building corner lies between us.
+    // The sight check runs at eye height so a low obstacle no longer blocks it.
     for (int i=0;i<=30;++i) {
         Vec2 p=planar(player.position)+(planar(v.position)-planar(player.position))*(i/30.0f);
-        for (const Box& b : world.buildings) if (overlaps(p,0.1f,b)) return false;
+        AABB eye{{p.x-0.1f, 1.5f, p.z-0.1f}, {p.x+0.1f, 1.7f, p.z+0.1f}};
+        for (const Block& b : world.buildings) if (overlaps(eye, b.bounds)) return false;
     }
     return true;
 }
@@ -174,7 +221,7 @@ std::vector<Interactable> Simulation::interactables() const {
                 Vec2 offsets[]={{0,1.5f},{-3.5f,1.5f},{3.5f,1.5f},{0,5.0f}};
                 for (Vec2 offset : offsets) {
                     Vec2 exit=s.world.entrance+offset;
-                    if (!s.freePosition(exit,0.45f,false)) continue;
+                    if (!s.freePosition(playerAABB({exit.x, 0, exit.z}),false)) continue;
                     s.player.position={exit.x, s.player.position.y, exit.z}; s.mode=Mode::OnFoot;
                     s.player.yaw=0; s.say("Welcome back to Palm District."); return;
                 }
@@ -237,7 +284,7 @@ void Simulation::interact() {
         // Prefer the driver's side, then try other sides. Never exit inside a wall.
         Vec2 exits[] = {vp-right*3.5f,vp+right*3.5f,
                         vp-f*3.8f,vp+f*3.8f};
-        for (Vec2 p : exits) if (p.x < World::WaterEdge && freePosition(p,0.45f,false)) {
+        for (Vec2 p : exits) if (p.x < World::WaterEdge && freePosition(playerAABB({p.x, 0, p.z}),false)) {
             player.position={p.x, 0, p.z}; player.verticalSpeed=0;
             player.swimming=false; mode=Mode::OnFoot; drivenVehicle=-1; v.speed=0;
             say("Back on foot."); return;
@@ -279,11 +326,13 @@ void Simulation::step(const Input& in, float dt) {
         float authority=std::abs(v.speed)*0.065f+0.9f*std::exp(-(v.speed*v.speed)/(2*8.0f*8.0f));
         v.yaw += v.steering*(v.speed >= 0 ? 1.0f : -1.0f)*authority*dt;
         Vec2 old=planar(v.position);
-        // Planar collision still resolves on the XZ plane (task 6 makes it 3D).
-        Vec2 wheels{v.position.x, v.position.z};
-        collided=move(wheels,forward(v.yaw)*(v.speed*dt),Vehicle::Radius,false,drivenVehicle);
+        // Phase 1 task 6: the car moves as a 3D body; X and Z resolve
+        // against 3D blocks, Y stays pinned to the ground.
+        Vec3 carCenter{v.position.x, Vehicle::Height/2, v.position.z};
+        collided=moveBody(carCenter, {Vehicle::Radius, Vehicle::Height/2, Vehicle::Radius},
+                          forward(v.yaw)*(v.speed*dt), false, drivenVehicle);
         if (collided) v.speed=0;
-        v.position.x=wheels.x; v.position.z=wheels.z;
+        v.position.x=carCenter.x; v.position.z=carCenter.z;
         progress.driven+=length(planar(v.position)-old);
         player.position.x=v.position.x; player.position.z=v.position.z;
         updateNpcs(dt);
@@ -298,11 +347,12 @@ void Simulation::step(const Input& in, float dt) {
     sprinting = in.sprint && length(direction) > 0.01f && !player.swimming;
     float speed=player.swimming ? 3.0f : (in.sprint ? 9.0f : 4.5f);
     Vec2 old=planar(player.position);
-    // Planar collision still resolves on the XZ plane (task 6 makes it 3D);
-    // move() works on a Vec2 copy and the result is written back.
-    Vec2 feet{player.position.x, player.position.z};
-    collided=move(feet,direction*(speed*dt),0.45f,interior);
-    player.position.x=feet.x; player.position.z=feet.z;
+    // Phase 1 task 6: the player walks as a 3D body. X and Z resolve against
+    // 3D blocks here; Y resolves in the floor/gravity system below.
+    Vec3 bodyCenter{player.position.x, player.position.y + Player::Height/2, player.position.z};
+    collided=moveBody(bodyCenter, {Player::Radius, Player::Height/2, Player::Radius},
+                      direction*(speed*dt), interior);
+    player.position.x=bodyCenter.x; player.position.z=bodyCenter.z;
     progress.walked+=length(planar(player.position)-old);
     if (length(direction)>0.01f) player.yaw=std::atan2(direction.x,direction.z);
     // Phase 1 task 5: step-up. After the horizontal move, if a slab top is
