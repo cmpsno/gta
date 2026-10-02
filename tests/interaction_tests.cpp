@@ -17,7 +17,7 @@ int main() {
         Simulation s;
         // Two cars are registered; the second needed no new interaction code.
         check(s.vehicles.size()==2,"Two vehicles are registered");
-        check(s.freePosition(planar(s.vehicles[1].position),Vehicle::Radius,false,1),"Second car spawn must be clear");
+        check(s.freePosition(vehicleAABB(s.vehicles[1].position),false,1),"Second car spawn must be clear");
         check(s.driven()==nullptr,"Nobody is driving at spawn");
         // The second car is enterable through the same generic path as the first.
         s.player.position={s.vehicles[1].position.x+3,0,s.vehicles[1].position.z};
@@ -30,7 +30,7 @@ int main() {
         Input brake;brake.brake=true;run(s,brake,240);
         s.interact();
         check(s.mode==Mode::OnFoot && s.drivenVehicle==-1,"Exiting the second car restores on-foot state");
-        check(s.freePosition(planar(s.player.position),0.45f,false),"Second car exit is clear");
+        check(s.freePosition(playerAABB(s.player.position),false),"Second car exit is clear");
         // Eligibility rejects the same way for both instances.
         s.reset();
         s.player.position={s.vehicles[1].position.x+30,0,s.vehicles[1].position.z};
