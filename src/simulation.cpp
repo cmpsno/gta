@@ -92,7 +92,7 @@ void Simulation::reset() { *this = Simulation{}; }
 void Simulation::say(const std::string& text) { notice=text; noticeTime=3; }
 Vehicle* Simulation::driven() { return drivenVehicle >= 0 ? &vehicles[drivenVehicle] : nullptr; }
 const Vehicle* Simulation::driven() const { return drivenVehicle >= 0 ? &vehicles[drivenVehicle] : nullptr; }
-Vec2 Simulation::focus() const { return mode == Mode::Driving ? driven()->position : player.position; }
+Vec2 Simulation::focus() const { return mode == Mode::Driving ? driven()->position : planar(player.position); }
 bool Simulation::freePosition(Vec2 p, float r, bool interior, int selfVehicle) const {
     float bound = interior ? 10.0f : World::Limit;
     if (p.x-r < -bound || p.x+r > bound || p.z-r < -bound || p.z+r > bound) return false;
@@ -120,17 +120,17 @@ bool Simulation::move(Vec2& p, Vec2 delta, float radius, bool interior, int self
     return hit;
 }
 bool Simulation::canEnterCar(const Vehicle& v) const {
-    if (mode!=Mode::OnFoot || player.swimming || player.height>0.05f || length(player.position-v.position)>=4.5f) return false;
+    if (mode!=Mode::OnFoot || player.swimming || player.position.y>0.05f || length(planar(player.position)-v.position)>=4.5f) return false;
     // Proximity alone is insufficient when a building corner lies between us.
     for (int i=0;i<=30;++i) {
-        Vec2 p=player.position+(v.position-player.position)*(i/30.0f);
+        Vec2 p=planar(player.position)+(v.position-planar(player.position))*(i/30.0f);
         for (const Box& b : world.buildings) if (overlaps(p,0.1f,b)) return false;
     }
     return true;
 }
 void Simulation::enterVehicle(std::size_t i) {
     mode=Mode::Driving; drivenVehicle=static_cast<int>(i);
-    player.position=vehicles[i].position;
+    player.position.x=vehicles[i].position.x; player.position.z=vehicles[i].position.z;
     progress.enteredCar=true;
     say("W / S to accelerate and reverse. Space to brake.");
 }
@@ -145,7 +145,7 @@ std::vector<Interactable> Simulation::interactables() const {
                 for (Vec2 offset : offsets) {
                     Vec2 exit=s.world.entrance+offset;
                     if (!s.freePosition(exit,0.45f,false)) continue;
-                    s.player.position=exit; s.mode=Mode::OnFoot;
+                    s.player.position={exit.x, s.player.position.y, exit.z}; s.mode=Mode::OnFoot;
                     s.player.yaw=0; s.say("Welcome back to Palm District."); return;
                 }
                 s.say("The street exit is blocked. Reset with R to return to spawn.");
@@ -163,7 +163,7 @@ std::vector<Interactable> Simulation::interactables() const {
     out.push_back({[this]{ return world.entrance; }, 2.8f,
         [](const Simulation&){ return true; },
         [](Simulation& s){
-            s.mode=Mode::Interior; s.player.position={0,6.5f}; s.player.yaw=Pi;
+            s.mode=Mode::Interior; s.player.position={0, s.player.position.y, 6.5f}; s.player.yaw=Pi;
             s.progress.visitedRoom=true; s.say("Studio interior. The mint door leads outside.");
         },
         [](const Simulation&){ return "E  /  Enter the studio"; }});
@@ -174,7 +174,7 @@ std::vector<Interactable> Simulation::interactables() const {
                 // V0.3 light touch: the pedestrian acknowledges the player.
                 // Dialogue trees wait for a later milestone.
                 Npc& n=s.npcs[0];
-                Vec2 to=s.player.position-n.position;
+                Vec2 to=planar(s.player.position)-n.position;
                 n.yaw=std::atan2(to.x,to.z);
                 n.state=NpcState::Idle; n.idleTimer=2.0f;
                 s.say("The pedestrian nods hello.");
@@ -190,7 +190,7 @@ std::string Simulation::prompt() const {
     }
     if (player.swimming) return "Swim toward the beach to return to shore";
     for (const auto& it : interactables()) {
-        if (length(player.position-it.position()) > it.radius) continue;
+        if (length(planar(player.position)-it.position()) > it.radius) continue;
         if (!it.eligible(*this)) continue;
         return it.prompt(*this);
     }
@@ -207,15 +207,15 @@ void Simulation::interact() {
         Vec2 exits[] = {v.position-right*3.5f,v.position+right*3.5f,
                         v.position-f*3.8f,v.position+f*3.8f};
         for (Vec2 p : exits) if (p.x < World::WaterEdge && freePosition(p,0.45f,false)) {
-            player.position=p; player.height=0; player.verticalSpeed=0;
+            player.position={p.x, 0, p.z}; player.verticalSpeed=0;
             player.swimming=false; mode=Mode::OnFoot; drivenVehicle=-1; v.speed=0;
             say("Back on foot."); return;
         }
         say("No room to exit. Move the car into an open space."); return;
     }
-    if (player.height > 0.05f || player.swimming) return;
+    if (player.position.y > 0.05f || player.swimming) return;
     for (const auto& it : interactables()) {
-        if (length(player.position-it.position()) > it.radius) continue;
+        if (length(planar(player.position)-it.position()) > it.radius) continue;
         if (!it.eligible(*this)) continue;
         it.trigger(*this);
         return;
@@ -250,31 +250,36 @@ void Simulation::step(const Input& in, float dt) {
         Vec2 old=v.position;
         collided=move(v.position,forward(v.yaw)*(v.speed*dt),Vehicle::Radius,false,drivenVehicle);
         if (collided) v.speed=0;
-        progress.driven+=length(v.position-old); player.position=v.position;
+        progress.driven+=length(v.position-old);
+        player.position.x=v.position.x; player.position.z=v.position.z;
         updateNpcs(dt);
         return;
     }
     bool interior=mode==Mode::Interior;
-    player.swimming=!interior && player.position.x > World::WaterEdge && player.height <= 0;
+    player.swimming=!interior && player.position.x > World::WaterEdge && player.position.y <= 0;
     Vec2 direction=length(in.movement)>1 ? normalized(in.movement) : in.movement;
     sprinting = in.sprint && length(direction) > 0.01f && !player.swimming;
     float speed=player.swimming ? 3.0f : (in.sprint ? 9.0f : 4.5f);
-    Vec2 old=player.position;
-    collided=move(player.position,direction*(speed*dt),0.45f,interior);
-    progress.walked+=length(player.position-old);
+    Vec2 old=planar(player.position);
+    // Planar collision still resolves on the XZ plane (task 6 makes it 3D);
+    // move() works on a Vec2 copy and the result is written back.
+    Vec2 feet{player.position.x, player.position.z};
+    collided=move(feet,direction*(speed*dt),0.45f,interior);
+    player.position.x=feet.x; player.position.z=feet.z;
+    progress.walked+=length(planar(player.position)-old);
     if (length(direction)>0.01f) player.yaw=std::atan2(direction.x,direction.z);
-    if (in.jump && !player.swimming && player.height<=0) {
+    if (in.jump && !player.swimming && player.position.y<=0) {
         player.verticalSpeed=7; progress.jumped=true;
     }
     player.verticalSpeed-=20*dt;
-    player.height=std::max(0.0f,player.height+player.verticalSpeed*dt);
-    if (player.height<=0) {
+    player.position.y=std::max(0.0f,player.position.y+player.verticalSpeed*dt);
+    if (player.position.y<=0) {
         // V0.1: a real fall (not a step or a swim stroke) flags one frame of
         // landing feedback for the renderer.
         if (player.verticalSpeed < -3.5f) justLanded=true;
         player.verticalSpeed=0;
     }
-    player.swimming=!interior && player.position.x > World::WaterEdge && player.height<=0;
+    player.swimming=!interior && player.position.x > World::WaterEdge && player.position.y<=0;
     if (player.swimming) progress.swam=true;
     updateNpcs(dt);
 }

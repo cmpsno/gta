@@ -38,9 +38,9 @@ int main(int argc,char** argv) {
         SetTextureFilter(view.font.texture,TEXTURE_FILTER_BILINEAR); break;
     }
     if (smoke) { view.welcome=scene=="welcome"; view.help=false; }
-    if (scene=="studio") { sim.player.position=sim.world.entrance;sim.interact();view.yaw=Pi;view.pitch=0.52f; }
-    if (scene=="water") {sim.player.position={78,12};sim.step({},FixedStep);view.yaw=Pi/2;view.pitch=0.32f;}
-    if (scene=="drive") {sim.player.position={5.2f,5};sim.interact();}
+    if (scene=="studio") { sim.player.position={sim.world.entrance.x, 0, sim.world.entrance.z};sim.interact();view.yaw=Pi;view.pitch=0.52f; }
+    if (scene=="water") {sim.player.position={78,0,12};sim.step({},FixedStep);view.yaw=Pi/2;view.pitch=0.32f;}
+    if (scene=="drive") {sim.player.position={5.2f,0,5};sim.interact();}
     if (smoke && scene=="street") {view.yaw=3.8f;view.pitch=0.42f;}
     updateCamera(view,sim,FixedStep,true);
     float accumulator=0;

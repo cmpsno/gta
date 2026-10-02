@@ -45,7 +45,8 @@ Requirements: C++17 compiler, CMake >= 3.15, raylib (version pinned in CMake). O
 
 ### Current state (being migrated)
 
-- Positions are `Vec2 (x, z)` plus a separate height.
+- `Player.position` is `Vec3` (`height` is now `position.y`). Vehicle and NPC
+  positions are still `Vec2 (x, z)`; `planar()` projects to XZ until task 6.
 - `Box` is `x, z, width, depth, height`; collision resolves on the XZ plane.
 - Ground is implicit at y = 0.
 - One hardcoded interior room.
