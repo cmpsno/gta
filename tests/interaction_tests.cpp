@@ -20,7 +20,7 @@ int main() {
         check(s.freePosition(s.vehicles[1].position,Vehicle::Radius,false,1),"Second car spawn must be clear");
         check(s.driven()==nullptr,"Nobody is driving at spawn");
         // The second car is enterable through the same generic path as the first.
-        s.player.position=s.vehicles[1].position+Vec2{3,0};
+        s.player.position={s.vehicles[1].position.x+3,0,s.vehicles[1].position.z};
         check(s.prompt()=="E  /  Enter vehicle","Second car offers the car prompt");
         s.interact();
         check(s.mode==Mode::Driving && s.drivenVehicle==1,"Entering the second car drives it");
@@ -30,20 +30,20 @@ int main() {
         Input brake;brake.brake=true;run(s,brake,240);
         s.interact();
         check(s.mode==Mode::OnFoot && s.drivenVehicle==-1,"Exiting the second car restores on-foot state");
-        check(s.freePosition(s.player.position,0.45f,false),"Second car exit is clear");
+        check(s.freePosition(planar(s.player.position),0.45f,false),"Second car exit is clear");
         // Eligibility rejects the same way for both instances.
         s.reset();
-        s.player.position=s.vehicles[1].position+Vec2{30,0};
+        s.player.position={s.vehicles[1].position.x+30,0,s.vehicles[1].position.z};
         s.interact();
         check(s.mode==Mode::OnFoot,"Far interactable is rejected for the second car too");
-        s.player.position=s.vehicles[1].position+Vec2{3,0};
-        s.player.height=0.5f;s.interact();
+        s.player.position={s.vehicles[1].position.x+3,0,s.vehicles[1].position.z};
+        s.player.position.y=0.5f;s.interact();
         check(s.mode==Mode::OnFoot,"Airborne player cannot enter the second car");
         // Parked cars are solid to each other: driving into one stops the car.
         s.reset();
         s.vehicles[0].position={2,5};s.vehicles[0].yaw=0;
         s.vehicles[1].position={2,16};
-        s.player.position={4.5f,5};s.interact();
+        s.player.position={4.5f,0,5};s.interact();
         check(s.drivenVehicle==0,"First car still enterable");
         drive={};drive.throttle=1;run(s,drive,300);
         check(s.vehicles[0].position.z<13.0f,"Driven car stops before the parked car");
@@ -52,7 +52,7 @@ int main() {
         // NPC greeting: proximity + E turns the pedestrian to face the player.
         s.reset();
         s.npcs[0].position={8,-40};s.npcs[0].state=NpcState::Walking;
-        s.player.position={9.5f,-40};
+        s.player.position={9.5f,0,-40};
         check(s.prompt()=="E  /  Greet pedestrian","Pedestrian offers a greet prompt");
         s.interact();
         check(s.npcs[0].state==NpcState::Idle,"Greeting pauses the pedestrian");

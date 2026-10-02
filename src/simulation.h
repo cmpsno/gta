@@ -14,15 +14,21 @@ Vec2 operator*(Vec2 a, float s);
 float length(Vec2 v);
 Vec2 normalized(Vec2 v);
 Vec2 forward(float yaw);
+// Phase 1: planar projection. Player/NPC/vehicle collision still resolves on
+// the XZ plane until task 6 makes it 3D; this keeps each migration step
+// behavior-preserving.
+inline Vec2 planar(Vec3 v) { return {v.x, v.z}; }
 struct Box {
     float x, z, width, depth, height;
     int palette = 0;
 };
 bool overlaps(Vec2 center, float radius, const Box& box);
 enum class Mode { OnFoot, Driving, Interior };
+// Phase 1 task 2: single Vec3 position. `height` is now `position.y`;
+// planar collision still uses `planar(position)` until task 6.
 struct Player {
-    Vec2 position{7, 12};
-    float height = 0, verticalSpeed = 0, yaw = Pi;
+    Vec3 position{7, 0, 12};
+    float verticalSpeed = 0, yaw = Pi;
     bool swimming = false;
 };
 struct Vehicle {

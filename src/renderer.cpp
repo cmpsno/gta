@@ -77,7 +77,7 @@ void carModel(const Vehicle& c,float time,bool occupied) {
     }
 }
 void playerModel(const Player& p,float time,bool moving) {
-    float y=p.height+(p.swimming ? -0.7f : 0.0f);
+    float y=p.position.y+(p.swimming ? -0.7f : 0.0f);
     if (!p.swimming) DrawCylinder({p.position.x,0.03f,p.position.z},0.52f,0.52f,0.01f,16,{48,62,59,100});
     rlPushMatrix();
     rlTranslatef(p.position.x,y,p.position.z);
@@ -217,7 +217,7 @@ void minimap(const Simulation& s,const View& v,float x,float y,float size) {
 }
 void updateCamera(View& v,const Simulation& s,float dt,bool snap) {
     Vec2 p=s.focus();
-    float targetY=s.mode==Mode::Driving ? 1.4f : (s.player.swimming ? 0.7f : 1.3f+s.player.height*0.5f);
+    float targetY=s.mode==Mode::Driving ? 1.4f : (s.player.swimming ? 0.7f : 1.3f+s.player.position.y*0.5f);
     Vector3 target{p.x,targetY,p.z};
     float distance=s.mode==Mode::Interior ? std::min(v.distance,7.0f) : v.distance+(s.mode==Mode::Driving ? 3.0f : 0);
     Vector3 offset{-std::sin(v.yaw)*std::cos(v.pitch)*distance,std::sin(v.pitch)*distance,-std::cos(v.yaw)*std::cos(v.pitch)*distance};
@@ -299,7 +299,7 @@ void drawHud(const Simulation& s,const View& v) {
     }
     if (v.debug) {
         Vec2 p=s.focus();
-        text(v,TextFormat("x %.1f   z %.1f   height %.2f   collision %s",p.x,p.z,s.player.height,s.collided?"yes":"no"),w/2-210,28,17,Ink);
+        text(v,TextFormat("x %.1f   z %.1f   height %.2f   collision %s",p.x,p.z,s.player.position.y,s.collided?"yes":"no"),w/2-210,28,17,Ink);
         // V0.4: frame-time and object-count instrumentation on the F3 overlay.
         text(v,TextFormat("frame %.2f ms   sim %.2f ms   render %.2f ms",v.simMs+v.renderMs,v.simMs,v.renderMs),w/2-210,52,17,Ink);
         text(v,TextFormat("npcs %d   vehicles %d   box checks/step %ld",static_cast<int>(s.npcs.size()),static_cast<int>(s.vehicles.size()),s.collisionChecks),w/2-210,76,17,Ink);
