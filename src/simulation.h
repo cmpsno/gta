@@ -65,12 +65,18 @@ struct Progress {
 struct World {
     std::vector<Box> buildings;
     std::vector<Box> room;
+    // Phase 1 task 4: explicit floor slabs. The first entry is the ground
+    // itself; later tasks add raised slabs, stairs, and second floors.
+    std::vector<AABB> floors;
     Vec2 entrance{26, -9.6f};
     Vec2 roomExit{0, 7.8f};
     static constexpr float Limit = 103;
     static constexpr float WaterEdge = 74;
     World();
 };
+// Highest slab top at or below pos.y over the player's XZ position.
+// Falls back to 0, preserving the old implicit-ground invariant.
+float findFloorY(Vec3 pos, const std::vector<AABB>& floors);
 class Simulation; // Interactable callbacks observe/mutate it; defined below.
 // V0.3: a proximity interaction with a dynamic anchor, an eligibility check,
 // and an effect. Car entry, studio entry/exit, and NPC greeting are all

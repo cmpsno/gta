@@ -79,6 +79,19 @@ World::World() {
     };
     room = {{-10,0,1,20,5,0}, {10,0,1,20,5,0}, {0,-10,21,1,5,0},
             {0,10,21,1,5,0}, {-5,-5,3,2,1.4f,1}, {5,-4,3,6,1,2}};
+    // The ground as an explicit slab, spanning the playable area (and the
+    // interior's coordinate range). Everything reachable stands on it until
+    // later tasks add raised floors.
+    floors = {{{-104, -1, -104}, {104, 0, 104}}};
+}
+float findFloorY(Vec3 pos, const std::vector<AABB>& floors) {
+    float best = 0.0f;
+    for (const auto& f : floors) {
+        bool inside = pos.x >= f.min.x && pos.x <= f.max.x &&
+                      pos.z >= f.min.z && pos.z <= f.max.z;
+        if (inside && f.max.y <= pos.y && f.max.y > best) best = f.max.y;
+    }
+    return best;
 }
 Simulation::Simulation() {
     // V0.3: the second car is pure data registration -- no new interaction
@@ -260,7 +273,11 @@ void Simulation::step(const Input& in, float dt) {
         return;
     }
     bool interior=mode==Mode::Interior;
-    player.swimming=!interior && player.position.x > World::WaterEdge && player.position.y <= 0;
+    // Phase 1 task 4: gravity pulls to the nearest floor below, not to a
+    // hardcoded y = 0. With only the ground slab present this is identical
+    // to the old behavior.
+    float floorY=findFloorY(player.position, world.floors);
+    player.swimming=!interior && player.position.x > World::WaterEdge && player.position.y <= floorY;
     Vec2 direction=length(in.movement)>1 ? normalized(in.movement) : in.movement;
     sprinting = in.sprint && length(direction) > 0.01f && !player.swimming;
     float speed=player.swimming ? 3.0f : (in.sprint ? 9.0f : 4.5f);
@@ -272,18 +289,18 @@ void Simulation::step(const Input& in, float dt) {
     player.position.x=feet.x; player.position.z=feet.z;
     progress.walked+=length(planar(player.position)-old);
     if (length(direction)>0.01f) player.yaw=std::atan2(direction.x,direction.z);
-    if (in.jump && !player.swimming && player.position.y<=0) {
+    if (in.jump && !player.swimming && player.position.y<=floorY) {
         player.verticalSpeed=7; progress.jumped=true;
     }
     player.verticalSpeed-=20*dt;
-    player.position.y=std::max(0.0f,player.position.y+player.verticalSpeed*dt);
-    if (player.position.y<=0) {
+    player.position.y=std::max(floorY,player.position.y+player.verticalSpeed*dt);
+    if (player.position.y<=floorY) {
         // V0.1: a real fall (not a step or a swim stroke) flags one frame of
         // landing feedback for the renderer.
         if (player.verticalSpeed < -3.5f) justLanded=true;
         player.verticalSpeed=0;
     }
-    player.swimming=!interior && player.position.x > World::WaterEdge && player.position.y<=0;
+    player.swimming=!interior && player.position.x > World::WaterEdge && player.position.y<=floorY;
     if (player.swimming) progress.swam=true;
     updateNpcs(dt);
 }
