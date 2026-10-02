@@ -151,9 +151,15 @@ void exterior(const Simulation& s,const View& v) {
             }
         }
     }
+    // Phase 1 task 5: test staircase. floors[0] is the ground slab, already
+    // drawn as sand; every later slab renders as a concrete step.
+    for (std::size_t i=1;i<s.world.floors.size();++i) {
+        const AABB& f=s.world.floors[i];
+        cube({(f.min.x+f.max.x)/2,(f.min.y+f.max.y)/2,(f.min.z+f.max.z)/2},
+             f.max.x-f.min.x,f.max.y-f.min.y,f.max.z-f.min.z,{148,168,158,255});
+    }
     // Studio landmark. Its door is a transition trigger, not a gap in collision.
-    cube({26,1.55f,-10.94f},2.4f,3.1f,0.12f,Mint);
-    cube({26,3.4f,-10.4f},6,0.3f,2.3f,{71,107,96,255});
+    cube({26,1.55f,-10.94f},2.4f,3.1f,0.12f,Mint);    cube({26,3.4f,-10.4f},6,0.3f,2.3f,{71,107,96,255});
     DrawCylinderWires({26,0.15f,-9.6f},2,2,0.02f,32,Mint);
     for (int i=-90;i<=90;i+=18) {
         palmTree(68,static_cast<float>(i),6.5f+(i%3),0.4f);

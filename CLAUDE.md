@@ -50,6 +50,9 @@ Requirements: C++17 compiler, CMake >= 3.15, raylib (version pinned in CMake). O
   `planar()` projects to XZ until task 6.
 - Floors are explicit AABB slabs (`World::floors`, ground slab included);
   gravity pulls the player to `findFloorY`, not to a hardcoded y = 0.
+- Step-up: after the horizontal move, a slab top within `MaxStepHeight`
+  (0.6 m) above the feet snaps the player up. Test staircase in the world
+  (x in [-14,-10], z in [20,38], five 0.5 m steps to a 2.5 m platform).
 - `Box` is `x, z, width, depth, height`; collision resolves on the XZ plane.
 - Ground is implicit at y = 0.
 - One hardcoded interior room.

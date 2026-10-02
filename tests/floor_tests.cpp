@@ -46,6 +46,26 @@ int main() {
         check(s.player.position.y > 0, "Jump leaves the floor");
         for (int i = 0; i < 120; ++i) s.step({}, FixedStep);
         near(s.player.position.y, 0, 1e-6f, "Jump lands back on the floor");
+
+        // Phase 1 task 5: walk up the test staircase without falling through.
+        // 480 steps at 4.5 m/s covers the 16 m to the platform middle.
+        s.reset();
+        s.player.position = {-12, 0, 18};
+        Input climb;
+        climb.movement = {0, 1};
+        float lastY = 0;
+        for (int i = 0; i < 480; ++i) {
+            s.step(climb, FixedStep);
+            // Step-up snaps up; gravity never lets the feet sink mid-climb.
+            check(s.player.position.y >= lastY - 0.01f, "No sinking while climbing");
+            lastY = s.player.position.y;
+        }
+        check(s.player.position.z > 30, "Climbed past the stairs onto the platform");
+        near(s.player.position.y, 2.5f, 0.05f, "Standing on the platform top");
+        // And back down: gravity walks the player down the steps, no pops.
+        climb.movement = {0, -1};
+        for (int i = 0; i < 600; ++i) s.step(climb, FixedStep);
+        near(s.player.position.y, 0, 0.05f, "Back on the ground after descending");
     } catch (const std::exception& e) {
         std::cout << "FAIL: " << e.what() << "\n";
         return 1;
