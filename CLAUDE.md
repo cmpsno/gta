@@ -43,19 +43,14 @@ Requirements: C++17 compiler, CMake >= 3.15, raylib (version pinned in CMake). O
 - **Rendering:** raylib `DrawCube` / `DrawCubeWires`, third-person follow camera, distance culling, top-down minimap.
 - **Input:** centralized mapping; raw key states polled each frame.
 
-### Current state (being migrated)
+### Current state (Phase 1 complete)
 
-- `Player.position` is `Vec3` (`height` is now `position.y`). `Vehicle.position`
-  is `Vec3` too, pinned at y = 0. NPC positions are still `Vec2 (x, z)`;
-  `planar()` projects to XZ until task 6.
-- Floors are explicit AABB slabs (`World::floors`, ground slab included);
-  gravity pulls the player to `findFloorY`, not to a hardcoded y = 0.
-- Step-up: after the horizontal move, a slab top within `MaxStepHeight`
-  (0.6 m) above the feet snaps the player up. Test staircase in the world
-  (x in [-14,-10], z in [20,38], five 0.5 m steps to a 2.5 m platform).
-- `Box` is `x, z, width, depth, height`; collision resolves on the XZ plane.
-- Ground is implicit at y = 0.
-- One hardcoded interior room.
+- `Player.position` and `Vehicle.position` are `Vec3` (vehicle pinned at y = 0). NPC positions are still `Vec2 (x, z)`; `planar()` projects to XZ.
+- Floors are explicit AABB slabs (`World::floors`, ground slab included); gravity pulls the player to `findFloorY`, not to a hardcoded y = 0.
+- Step-up: after the horizontal move, a slab top within `MaxStepHeight` (0.6 m) above the feet snaps the player up (`findStepTop`). Test staircase in the world (x in [-14,-10], z in [20,38], five 0.5 m steps to a 2.5 m platform).
+- Colliders are `Block{AABB bounds, int palette}` (replaced `Box`). Movers are vertical cylinders: circle on XZ (rotation-invariant for yawing bodies) extruded over Y, tested against block footprints gated on Y overlap — an upper-floor wall doesn't block the ground floor. `Simulation::moveBody` does axis-separated X/Z stepping; Y resolves via floors/gravity.
+- One two-floor building at (-30, 29): hollow shell, ground-floor walls, 6-step interior staircase, second-floor slab, second-floor walls, walk-through east doorway (no teleport; same coordinate space).
+- One hardcoded studio interior (separate space, `Mode::Interior` teleport).
 
 ### Target state
 
@@ -84,6 +79,6 @@ Requirements: C++17 compiler, CMake >= 3.15, raylib (version pinned in CMake). O
 
 ## Testing
 
-- **Unit (Catch2/doctest):** AABB overlap, ray-AABB, floor detection, stair step-up.
-- **Integration:** scripted-input `Simulation::step(dt)` runs. Examples: player walks up a ramp to the second floor; vehicle hits a building and stops.
+- **Unit (plain asserts, CTest):** AABB overlap, `findFloorY`, `findStepTop`, `freePosition` Y-gating (`sandbox_collision`, `sandbox_floor`, `sandbox_vec3`).
+- **Integration:** scripted-input `Simulation::step(dt)` runs. Examples: player walks up a ramp to the second floor; vehicle hits a building and stops; player climbs the two-floor building's stairs.
 - **Manual checklist:** enter/exit car, swim, enter building and climb to roof, jump off roof to street, drive into building with no clipping.
