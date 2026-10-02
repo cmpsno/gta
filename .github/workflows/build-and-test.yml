@@ -1,0 +1,44 @@
+# Phase 2 task 0: CI for cmpsno/gta
+# - headless: full build + ctest (the logic that must never break)
+# - graphical-syntax: syntax-only compile of renderer.cpp and main.cpp
+#   against the raylib headers at the commit pinned in CMakeLists.txt
+#   (no raylib build, no X11/GL needed)
+# Set both as required checks on v0.4 (Settings > Branches).
+
+name: build-and-test
+
+on:
+  pull_request:
+    branches: [v0.4]
+  push:
+    branches: [v0.4]
+
+jobs:
+  headless:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -B build-headless -DBUILD_GAME=OFF
+      - name: Build
+        run: cmake --build build-headless -j4
+      - name: Test
+        run: cd build-headless && ctest --output-on-failure
+
+  graphical-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch raylib headers at the pinned commit
+        run: |
+          SHA=$(grep -oE 'GIT_TAG [0-9a-f]{40}' CMakeLists.txt | awk '{print $2}')
+          test -n "$SHA" || { echo "could not read raylib GIT_TAG from CMakeLists.txt"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/rl"
+          for h in raylib.h raymath.h rlgl.h; do
+            curl -fsSL "https://raw.githubusercontent.com/raysan5/raylib/$SHA/src/$h" -o "$RUNNER_TEMP/rl/$h"
+          done
+      - name: Syntax check (graphical sources)
+        run: >
+          g++ -std=c++17 -Wall -Wextra -Wpedantic -fsyntax-only
+          -Isrc -isystem "$RUNNER_TEMP/rl"
+          src/renderer.cpp src/main.cpp
