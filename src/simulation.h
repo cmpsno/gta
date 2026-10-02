@@ -7,6 +7,8 @@
 namespace palm {
 constexpr float Pi = 3.14159265359f;
 constexpr float FixedStep = 1.0f / 120.0f;
+// Phase 1 task 5: tallest step the player can walk up without jumping.
+constexpr float MaxStepHeight = 0.6f;
 struct Vec2 { float x = 0, z = 0; };
 Vec2 operator+(Vec2 a, Vec2 b);
 Vec2 operator-(Vec2 a, Vec2 b);
@@ -77,6 +79,9 @@ struct World {
 // Highest slab top at or below pos.y over the player's XZ position.
 // Falls back to 0, preserving the old implicit-ground invariant.
 float findFloorY(Vec3 pos, const std::vector<AABB>& floors);
+// Lowest slab top strictly above pos.y but within maxStep, over the player's
+// XZ position. Returns pos.y when no such slab exists. Backs the step-up.
+float findStepTop(Vec3 pos, const std::vector<AABB>& floors, float maxStep);
 class Simulation; // Interactable callbacks observe/mutate it; defined below.
 // V0.3: a proximity interaction with a dynamic anchor, an eligibility check,
 // and an effect. Car entry, studio entry/exit, and NPC greeting are all

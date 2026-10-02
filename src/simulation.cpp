@@ -83,6 +83,13 @@ World::World() {
     // interior's coordinate range). Everything reachable stands on it until
     // later tasks add raised floors.
     floors = {{{-104, -1, -104}, {104, 0, 104}}};
+    // Phase 1 task 5: test staircase. Five 0.5 m steps climbing +z to a
+    // 2.5 m platform. Clear of buildings, spawn, and the NPC route.
+    for (int i = 0; i < 5; ++i) {
+        float top = 0.5f * (i + 1);
+        floors.push_back({{-14, 0, 20 + 2.0f * i}, {-10, top, 22 + 2.0f * i}});
+    }
+    floors.push_back({{-14, 0, 30}, {-10, 2.5f, 38}}); // platform
 }
 float findFloorY(Vec3 pos, const std::vector<AABB>& floors) {
     float best = 0.0f;
@@ -92,6 +99,16 @@ float findFloorY(Vec3 pos, const std::vector<AABB>& floors) {
         if (inside && f.max.y <= pos.y && f.max.y > best) best = f.max.y;
     }
     return best;
+}
+float findStepTop(Vec3 pos, const std::vector<AABB>& floors, float maxStep) {
+    float best = pos.y + maxStep + 1.0f;
+    for (const auto& f : floors) {
+        bool inside = pos.x >= f.min.x && pos.x <= f.max.x &&
+                      pos.z >= f.min.z && pos.z <= f.max.z;
+        if (inside && f.max.y > pos.y && f.max.y <= pos.y + maxStep && f.max.y < best)
+            best = f.max.y;
+    }
+    return best <= pos.y + maxStep ? best : pos.y;
 }
 Simulation::Simulation() {
     // V0.3: the second car is pure data registration -- no new interaction
@@ -273,9 +290,8 @@ void Simulation::step(const Input& in, float dt) {
         return;
     }
     bool interior=mode==Mode::Interior;
-    // Phase 1 task 4: gravity pulls to the nearest floor below, not to a
-    // hardcoded y = 0. With only the ground slab present this is identical
-    // to the old behavior.
+    // Gravity pulls to the nearest floor below (task 4), not to a hardcoded
+    // y = 0. Recomputed after the horizontal move since the XZ changed.
     float floorY=findFloorY(player.position, world.floors);
     player.swimming=!interior && player.position.x > World::WaterEdge && player.position.y <= floorY;
     Vec2 direction=length(in.movement)>1 ? normalized(in.movement) : in.movement;
@@ -289,6 +305,16 @@ void Simulation::step(const Input& in, float dt) {
     player.position.x=feet.x; player.position.z=feet.z;
     progress.walked+=length(planar(player.position)-old);
     if (length(direction)>0.01f) player.yaw=std::atan2(direction.x,direction.z);
+    // Phase 1 task 5: step-up. After the horizontal move, if a slab top is
+    // within step height above the feet, snap up to it. The reach check is
+    // the guard: a slab 2 m up never triggers. This is what lets the player
+    // walk up stairs; the planar move itself never sees floors.
+    floorY=findFloorY(player.position, world.floors);
+    float stepTop=findStepTop(player.position, world.floors, MaxStepHeight);
+    if (stepTop > player.position.y) {
+        player.position.y=stepTop;
+        floorY=stepTop;
+    }
     if (in.jump && !player.swimming && player.position.y<=floorY) {
         player.verticalSpeed=7; progress.jumped=true;
     }
