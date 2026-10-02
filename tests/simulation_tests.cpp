@@ -62,6 +62,12 @@ int main() {
         s.player.position={-30,0,10};walk={};walk.movement={0,1};
         run(s,walk,600);
         check(s.player.position.z<14.6f,"Ground-floor wall blocks from outside");
+        // Phase 1 task 8: enter through the east doorway (x=-16, z∈[28,30]).
+        s.reset();
+        s.player.position={-10,0,29};walk={};walk.movement={-1,0};
+        run(s,walk,600);
+        check(s.player.position.x<-16.6f,"Player walks through the doorway inside");
+        check(s.player.position.x>-44.0f,"Player stops inside, not through the far wall");
         s.reset();s.player.position={102,0,40};walk.movement={1,0};run(s,walk,120);
         check(s.player.position.x<=102.55f,"World boundary contains player");
         s.reset();s.interact();check(s.mode==Mode::OnFoot,"Cannot enter a car at arbitrary distance");
