@@ -204,7 +204,7 @@ void minimap(const Simulation& s,const View& v,float x,float y,float size) {
     }
     Vector2 door=at(s.world.entrance); DrawCircleV(door,3.5f,Mint);
     for (const auto& veh : s.vehicles) {
-        Vector2 dot=at(veh.position); DrawRectangleV({dot.x-3,dot.y-3},{6,6},{234,137,103,255});
+        Vector2 dot=at(planar(veh.position)); DrawRectangleV({dot.x-3,dot.y-3},{6,6},{234,137,103,255});
     }
     for (const auto& n : s.npcs) { Vector2 d=at(n.position); DrawCircleV(d,2.5f,{196,118,92,255}); }
     Vec2 pos=s.mode==Mode::Interior ? s.world.entrance : s.focus();

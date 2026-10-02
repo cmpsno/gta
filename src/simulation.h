@@ -31,8 +31,10 @@ struct Player {
     float verticalSpeed = 0, yaw = Pi;
     bool swimming = false;
 };
+// Phase 1 task 3: Vec3 position. The car stays on the ground (y = 0);
+// planar collision still uses `planar(position)` until task 6.
 struct Vehicle {
-    Vec2 position{2, 5};
+    Vec3 position{2, 0, 5};
     float yaw = Pi, speed = 0, steering = 0;
     static constexpr float Radius = 2.45f;
 };
