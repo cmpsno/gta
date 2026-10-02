@@ -48,6 +48,8 @@ Requirements: C++17 compiler, CMake >= 3.15, raylib (version pinned in CMake). O
 - `Player.position` is `Vec3` (`height` is now `position.y`). `Vehicle.position`
   is `Vec3` too, pinned at y = 0. NPC positions are still `Vec2 (x, z)`;
   `planar()` projects to XZ until task 6.
+- Floors are explicit AABB slabs (`World::floors`, ground slab included);
+  gravity pulls the player to `findFloorY`, not to a hardcoded y = 0.
 - `Box` is `x, z, width, depth, height`; collision resolves on the XZ plane.
 - Ground is implicit at y = 0.
 - One hardcoded interior room.
