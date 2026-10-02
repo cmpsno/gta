@@ -1,4 +1,5 @@
 #pragma once
+#include "vec3.h"
 #include <functional>
 #include <string>
 #include <vector>
