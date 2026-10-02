@@ -94,14 +94,20 @@ World::World() {
     // (3D colliders — task 6 makes them block only the floor they're on);
     // the slab and stairs live in `floors` (walkable, step-up climbs them).
     // Footprint x∈[-44,-16], z∈[15,43]; wall thickness 0.6; floor height 3.
+    // Phase 1 task 8: the east ground-floor wall has a 2 m doorway at
+    // z∈[28,30]. The building is in the exterior coordinate space, so entry
+    // is walk-through — no teleport. (Phase 2 will generalize Mode::Interior
+    // to "inside building X".)
     {
         float x0=-44, x1=-16, z0=15, z1=43, t=0.6f, fh=3.0f;
+        float dz0=28, dz1=30; // doorway z-range
         int pal=2;
-        // Ground-floor walls (y 0..3).
+        // Ground-floor walls (y 0..3). East wall is split for the doorway.
         buildings.push_back({{{x0,0,z0},{x1,fh,z0+t}}, pal});
         buildings.push_back({{{x0,0,z1-t},{x1,fh,z1}}, pal});
         buildings.push_back({{{x0,0,z0},{x0+t,fh,z1}}, pal});
-        buildings.push_back({{{x1-t,0,z0},{x1,fh,z1}}, pal});
+        buildings.push_back({{{x1-t,0,z0},{x1-t,fh,dz0}}, pal});
+        buildings.push_back({{{x1-t,0,dz1},{x1-t,fh,z1}}, pal});
         // Second-floor walls (y 3..6).
         buildings.push_back({{{x0,fh,z0},{x1,2*fh,z0+t}}, pal});
         buildings.push_back({{{x0,fh,z1-t},{x1,2*fh,z1}}, pal});
