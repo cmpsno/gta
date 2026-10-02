@@ -20,26 +20,42 @@ Vec2 forward(float yaw);
 // the XZ plane until task 6 makes it 3D; this keeps each migration step
 // behavior-preserving.
 inline Vec2 planar(Vec3 v) { return {v.x, v.z}; }
-struct Box {
-    float x, z, width, depth, height;
+// Phase 1 task 6: the 3D successor to Box. Collision works on `bounds`;
+// `palette` is render-only data carried along.
+struct Block {
+    AABB bounds;
     int palette = 0;
 };
-bool overlaps(Vec2 center, float radius, const Box& box);
+inline Block makeBlock(float x, float z, float w, float d, float h, int palette) {
+    return {{{x - w / 2, 0, z - d / 2}, {x + w / 2, h, z + d / 2}}, palette};
+}
 enum class Mode { OnFoot, Driving, Interior };
 // Phase 1 task 2: single Vec3 position. `height` is now `position.y`;
 // planar collision still uses `planar(position)` until task 6.
 struct Player {
-    Vec3 position{7, 0, 12};
+    Vec3 position{7, 0, 12}; // feet
     float verticalSpeed = 0, yaw = Pi;
     bool swimming = false;
+    static constexpr float Radius = 0.45f;
+    static constexpr float Height = 1.8f;
 };
+// Body AABBs for the 3D collision in task 6.
+inline AABB playerAABB(Vec3 feet) {
+    return {{feet.x - Player::Radius, feet.y, feet.z - Player::Radius},
+            {feet.x + Player::Radius, feet.y + Player::Height, feet.z + Player::Radius}};
+}
 // Phase 1 task 3: Vec3 position. The car stays on the ground (y = 0);
 // planar collision still uses `planar(position)` until task 6.
 struct Vehicle {
     Vec3 position{2, 0, 5};
     float yaw = Pi, speed = 0, steering = 0;
     static constexpr float Radius = 2.45f;
+    static constexpr float Height = 1.5f;
 };
+inline AABB vehicleAABB(Vec3 ground) {
+    return {{ground.x - Vehicle::Radius, 0, ground.z - Vehicle::Radius},
+            {ground.x + Vehicle::Radius, Vehicle::Height, ground.z + Vehicle::Radius}};
+}
 // V0.2: one independently-owned pedestrian. Position, facing, speed, route
 // progress, and behavior state live here so N NPCs can act independently
 // (V0.4 stress test reuses this struct directly).
@@ -65,8 +81,8 @@ struct Progress {
     int completed() const;
 };
 struct World {
-    std::vector<Box> buildings;
-    std::vector<Box> room;
+    std::vector<Block> buildings;
+    std::vector<Block> room;
     // Phase 1 task 4: explicit floor slabs. The first entry is the ground
     // itself; later tasks add raised slabs, stairs, and second floors.
     std::vector<AABB> floors;
@@ -115,7 +131,11 @@ public:
     void step(const Input& input, float dt);
     void interact();
     std::string prompt() const;
-    bool freePosition(Vec2 p, float radius, bool interior, int selfVehicle = -1) const;
+    // Phase 1 task 6: 3D collision. `body` is the mover's AABB; X and Z
+    // resolve axis-by-axis in moveBody, Y resolves in the floor/gravity
+    // system. Vehicles are solid to each other; the mover skips itself.
+    bool freePosition(const AABB& body, bool interior, int selfVehicle = -1) const;
+    bool moveBody(Vec3& center, Vec3 halfExtents, Vec2 delta, bool interior, int selfVehicle = -1);
     Vec2 focus() const;
     Vehicle* driven();
     const Vehicle* driven() const;
@@ -129,7 +149,6 @@ private:
     bool canEnterCar(const Vehicle& v) const;
     void enterVehicle(std::size_t i);
     std::vector<Interactable> interactables() const;
-    bool move(Vec2& p, Vec2 delta, float radius, bool interior, int selfVehicle = -1);
     void updateNpcs(float dt);
     void say(const std::string& text);
 };
