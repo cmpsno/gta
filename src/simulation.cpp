@@ -85,14 +85,14 @@ Simulation::Simulation() {
     // code was needed to make it enterable. Parked clear of the NPC route
     // and the studio door.
     vehicles.resize(2);
-    vehicles[1].position = {-14, -46};
+    vehicles[1].position = {-14, 0, -46};
     vehicles[1].yaw = Pi/2;
 }
 void Simulation::reset() { *this = Simulation{}; }
 void Simulation::say(const std::string& text) { notice=text; noticeTime=3; }
 Vehicle* Simulation::driven() { return drivenVehicle >= 0 ? &vehicles[drivenVehicle] : nullptr; }
 const Vehicle* Simulation::driven() const { return drivenVehicle >= 0 ? &vehicles[drivenVehicle] : nullptr; }
-Vec2 Simulation::focus() const { return mode == Mode::Driving ? driven()->position : planar(player.position); }
+Vec2 Simulation::focus() const { return mode == Mode::Driving ? planar(driven()->position) : planar(player.position); }
 bool Simulation::freePosition(Vec2 p, float r, bool interior, int selfVehicle) const {
     float bound = interior ? 10.0f : World::Limit;
     if (p.x-r < -bound || p.x+r > bound || p.z-r < -bound || p.z+r > bound) return false;
@@ -103,7 +103,7 @@ bool Simulation::freePosition(Vec2 p, float r, bool interior, int selfVehicle) c
     }
     // Every parked car is a physical object; a moving vehicle skips only itself.
     if (!interior) for (std::size_t i=0;i<vehicles.size();++i)
-        if (static_cast<int>(i) != selfVehicle && length(p-vehicles[i].position) < r+Vehicle::Radius) return false;
+        if (static_cast<int>(i) != selfVehicle && length(p-planar(vehicles[i].position)) < r+Vehicle::Radius) return false;
     return true;
 }
 bool Simulation::move(Vec2& p, Vec2 delta, float radius, bool interior, int selfVehicle) {
@@ -120,10 +120,10 @@ bool Simulation::move(Vec2& p, Vec2 delta, float radius, bool interior, int self
     return hit;
 }
 bool Simulation::canEnterCar(const Vehicle& v) const {
-    if (mode!=Mode::OnFoot || player.swimming || player.position.y>0.05f || length(planar(player.position)-v.position)>=4.5f) return false;
+    if (mode!=Mode::OnFoot || player.swimming || player.position.y>0.05f || length(planar(player.position)-planar(v.position))>=4.5f) return false;
     // Proximity alone is insufficient when a building corner lies between us.
     for (int i=0;i<=30;++i) {
-        Vec2 p=planar(player.position)+(v.position-planar(player.position))*(i/30.0f);
+        Vec2 p=planar(player.position)+(planar(v.position)-planar(player.position))*(i/30.0f);
         for (const Box& b : world.buildings) if (overlaps(p,0.1f,b)) return false;
     }
     return true;
@@ -155,7 +155,7 @@ std::vector<Interactable> Simulation::interactables() const {
     }
     if (mode != Mode::OnFoot) return out;
     for (std::size_t i=0;i<vehicles.size();++i) {
-        out.push_back({[this,i]{ return vehicles[i].position; }, 4.5f,
+        out.push_back({[this,i]{ return planar(vehicles[i].position); }, 4.5f,
             [i](const Simulation& s){ return s.canEnterCar(s.vehicles[i]); },
             [i](Simulation& s){ s.enterVehicle(i); },
             [](const Simulation&){ return "E  /  Enter vehicle"; }});
@@ -203,9 +203,10 @@ void Simulation::interact() {
         Vehicle& v=*driven();
         if (std::abs(v.speed) >= 1) { say("Stop the car before getting out."); return; }
         Vec2 f=forward(v.yaw), right{f.z,-f.x};
+        Vec2 vp=planar(v.position);
         // Prefer the driver's side, then try other sides. Never exit inside a wall.
-        Vec2 exits[] = {v.position-right*3.5f,v.position+right*3.5f,
-                        v.position-f*3.8f,v.position+f*3.8f};
+        Vec2 exits[] = {vp-right*3.5f,vp+right*3.5f,
+                        vp-f*3.8f,vp+f*3.8f};
         for (Vec2 p : exits) if (p.x < World::WaterEdge && freePosition(p,0.45f,false)) {
             player.position={p.x, 0, p.z}; player.verticalSpeed=0;
             player.swimming=false; mode=Mode::OnFoot; drivenVehicle=-1; v.speed=0;
@@ -247,10 +248,13 @@ void Simulation::step(const Input& in, float dt) {
         // Gaussian decays to ~0 by 24 m/s, leaving highway steering untouched.
         float authority=std::abs(v.speed)*0.065f+0.9f*std::exp(-(v.speed*v.speed)/(2*8.0f*8.0f));
         v.yaw += v.steering*(v.speed >= 0 ? 1.0f : -1.0f)*authority*dt;
-        Vec2 old=v.position;
-        collided=move(v.position,forward(v.yaw)*(v.speed*dt),Vehicle::Radius,false,drivenVehicle);
+        Vec2 old=planar(v.position);
+        // Planar collision still resolves on the XZ plane (task 6 makes it 3D).
+        Vec2 wheels{v.position.x, v.position.z};
+        collided=move(wheels,forward(v.yaw)*(v.speed*dt),Vehicle::Radius,false,drivenVehicle);
         if (collided) v.speed=0;
-        progress.driven+=length(v.position-old);
+        v.position.x=wheels.x; v.position.z=wheels.z;
+        progress.driven+=length(planar(v.position)-old);
         player.position.x=v.position.x; player.position.z=v.position.z;
         updateNpcs(dt);
         return;

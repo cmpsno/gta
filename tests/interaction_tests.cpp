@@ -17,7 +17,7 @@ int main() {
         Simulation s;
         // Two cars are registered; the second needed no new interaction code.
         check(s.vehicles.size()==2,"Two vehicles are registered");
-        check(s.freePosition(s.vehicles[1].position,Vehicle::Radius,false,1),"Second car spawn must be clear");
+        check(s.freePosition(planar(s.vehicles[1].position),Vehicle::Radius,false,1),"Second car spawn must be clear");
         check(s.driven()==nullptr,"Nobody is driving at spawn");
         // The second car is enterable through the same generic path as the first.
         s.player.position={s.vehicles[1].position.x+3,0,s.vehicles[1].position.z};
@@ -41,13 +41,13 @@ int main() {
         check(s.mode==Mode::OnFoot,"Airborne player cannot enter the second car");
         // Parked cars are solid to each other: driving into one stops the car.
         s.reset();
-        s.vehicles[0].position={2,5};s.vehicles[0].yaw=0;
-        s.vehicles[1].position={2,16};
+        s.vehicles[0].position={2,0,5};s.vehicles[0].yaw=0;
+        s.vehicles[1].position={2,0,16};
         s.player.position={4.5f,0,5};s.interact();
         check(s.drivenVehicle==0,"First car still enterable");
         drive={};drive.throttle=1;run(s,drive,300);
         check(s.vehicles[0].position.z<13.0f,"Driven car stops before the parked car");
-        check(length(s.vehicles[0].position-s.vehicles[1].position)>=2*Vehicle::Radius-0.05f,
+        check(length(planar(s.vehicles[0].position)-planar(s.vehicles[1].position))>=2*Vehicle::Radius-0.05f,
               "Cars never interpenetrate");
         // NPC greeting: proximity + E turns the pedestrian to face the player.
         s.reset();
