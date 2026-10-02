@@ -19,7 +19,7 @@ int main() {
         // One NPC exists, walking its route, and it spawns on clear ground.
         check(s.npcs.size()==1,"V0.2 ships exactly one NPC");
         check(s.npcs[0].state==NpcState::Walking,"NPC starts walking");
-        check(s.freePosition(s.npcs[0].position,0.45f,false),"NPC spawn must be clear");
+        check(s.freePosition(playerAABB({s.npcs[0].position.x, 0, s.npcs[0].position.z}),false),"NPC spawn must be clear");
         near(s.npcs[0].position.x,npcRoute()[0].x,0.001f,"NPC spawns on route point 0");
         near(s.npcs[0].position.z,npcRoute()[0].z,0.001f,"NPC spawns on route point 0");
         // The NPC visits every waypoint in route order, pausing at each.
@@ -52,11 +52,11 @@ int main() {
         check(n.state==NpcState::Walking && n.waypoint==2,"Idle expiry advances to the next waypoint");
         // A wall across the route stops the NPC; it never penetrates geometry.
         s.reset();
-        s.world.buildings.push_back({8,0,4,6,8,0});
+        s.world.buildings.push_back(makeBlock(8,0,4,6,8,0));
         run(s,{},3000);
         check(s.npcs[0].position.z<-2.0f,"NPC cannot walk through a blocking wall");
         check(s.npcs[0].position.z>-40.0f,"NPC still approaches until blocked");
-        check(s.freePosition(s.npcs[0].position,0.45f,false),"Blocked NPC never penetrates geometry");
+        check(s.freePosition(playerAABB({s.npcs[0].position.x, 0, s.npcs[0].position.z}),false),"Blocked NPC never penetrates geometry");
         // The NPC keeps walking while the player drives, swims, or idles.
         s.reset();
         Vec2 before=s.npcs[0].position;

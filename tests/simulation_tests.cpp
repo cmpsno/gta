@@ -16,8 +16,8 @@ void near(float a,float b,float tolerance,const char* message) {check(std::abs(a
 int main() {
     try {
         Simulation s;
-        check(s.freePosition(planar(s.player.position),0.45f,false),"Spawn must be clear");
-        check(s.freePosition(planar(s.vehicles[0].position),Vehicle::Radius,false,0),"Car spawn must be clear");
+        check(s.freePosition(playerAABB(s.player.position),false),"Spawn must be clear");
+        check(s.freePosition(vehicleAABB(s.vehicles[0].position),false,0),"Car spawn must be clear");
         s.player.position={0,0,30};Input walk;walk.movement={0,-1};
         run(s,walk,120);near(s.player.position.z,25.5f,0.02f,"Walk speed is meters per second");
         Simulation diagonal;diagonal.player.position={0,0,30};walk.movement={1,-1};
@@ -31,7 +31,20 @@ int main() {
         check(peak>1 && peak<1.3f,"Jump has a bounded arc");check(s.player.position.y==0,"Jump lands");
         s.reset();s.player.position={26,0,-5};walk={};walk.movement={0,-1};walk.sprint=true;
         run(s,walk,600);check(s.player.position.z>=-10.56f,"Building stops the player");
-        check(s.freePosition(planar(s.player.position),0.45f,false),"Collision never leaves player penetrating building");
+        check(s.freePosition(playerAABB(s.player.position),false),"Collision never leaves player penetrating building");
+        // Phase 1 task 6: collision is Y-aware. A wall floating above the
+        // ground (like a second-floor wall) does not block a walker below it.
+        s.reset();
+        s.world.buildings.push_back({{{6,3,-40},{10,5,40}}, 0});
+        s.player.position={8,0,-45};walk={};walk.movement={0,1};
+        run(s,walk,1500);
+        check(s.player.position.z>0,"Upper-floor wall does not block the ground floor");
+        // The same wall sitting on the ground does block.
+        s.reset();
+        s.world.buildings.push_back({{{6,0,-40},{10,5,40}}, 0});
+        s.player.position={8,0,-45};walk={};walk.movement={0,1};
+        run(s,walk,600);
+        check(s.player.position.z<-35,"Ground wall still blocks the player");
         s.reset();s.player.position={102,0,40};walk.movement={1,0};run(s,walk,120);
         check(s.player.position.x<=102.55f,"World boundary contains player");
         s.reset();s.interact();check(s.mode==Mode::OnFoot,"Cannot enter a car at arbitrary distance");
@@ -42,7 +55,7 @@ int main() {
         s.interact();check(s.mode==Mode::Driving,"Cannot exit at speed");
         Input brake;brake.brake=true;run(s,brake,240);near(s.vehicles[0].speed,0,0.001f,"Brake stops vehicle");
         s.interact();check(s.mode==Mode::OnFoot,"Stopped car permits exit");
-        check(s.freePosition(planar(s.player.position),0.45f,false),"Exit is outside vehicle and world geometry");
+        check(s.freePosition(playerAABB(s.player.position),false),"Exit is outside vehicle and world geometry");
         s.reset();s.vehicles[0].position={0,0,30};s.player.position={3.5f,0,30};s.interact();
         drive.throttle=-1;run(s,drive,120);check(s.vehicles[0].position.z>30,"Reverse moves backward");
         s.reset();s.player.position={5.2f,0,5};s.interact();drive={};drive.throttle=1;drive.steering=1;
@@ -50,24 +63,24 @@ int main() {
         s.reset();s.vehicles[0].position={26,0,-5};s.vehicles[0].yaw=Pi;s.player.position={29.5f,0,-5};s.interact();
         drive={};drive.throttle=1;run(s,drive,1200);
         check(s.vehicles[0].position.z>=-8.56f,"Car cannot tunnel into building at sustained throttle");
-        check(s.freePosition(planar(s.vehicles[0].position),Vehicle::Radius,false,0),"Vehicle collider remains clear");
+        check(s.freePosition(vehicleAABB(s.vehicles[0].position),false,0),"Vehicle collider remains clear");
         s.reset();s.vehicles[0].position={68,0,0};s.vehicles[0].yaw=Pi/2;s.player.position={65,0,0};s.interact();
         run(s,drive,600);check(s.vehicles[0].position.x<=69.56f,"Water boundary stops car");
         s.reset();s.player.position={s.world.entrance.x,0,s.world.entrance.z};s.interact();
         check(s.mode==Mode::Interior && s.progress.visitedRoom,"Studio enters its own scene");
-        check(s.freePosition(planar(s.player.position),0.45f,true),"Interior spawn is free");
+        check(s.freePosition(playerAABB(s.player.position),true),"Interior spawn is free");
         walk={};walk.movement={0,-1};run(s,walk,600);
         check(s.player.position.z>=-9.06f,"Interior walls contain player");
         s.interact();check(s.mode==Mode::Interior,"Room exit requires proximity");
         s.player.position={s.world.roomExit.x,0,s.world.roomExit.z};s.interact();check(s.mode==Mode::OnFoot,"Room exit returns to street");
-        check(s.freePosition(planar(s.player.position),0.45f,false),"Street exit is clear");
+        check(s.freePosition(playerAABB(s.player.position),false),"Street exit is clear");
         s.reset();s.vehicles[0].position={26,0,-7};s.player.position={29,0,-9.6f};
         s.mode=Mode::Interior;s.player.position={s.world.roomExit.x,0,s.world.roomExit.z};s.interact();
         check(s.mode==Mode::OnFoot,"Studio finds an alternate exit around parked car");
-        check(s.freePosition(planar(s.player.position),0.45f,false),"Studio exit never overlaps parked car");
+        check(s.freePosition(playerAABB(s.player.position),false),"Studio exit never overlaps parked car");
         s.reset();s.vehicles[0].position={37,0,-8.5f};s.player.position={39.5f,0,-12};
-        check(s.freePosition(planar(s.player.position),0.45f,false),"Corner interaction test player is outside wall");
-        check(s.freePosition(planar(s.vehicles[0].position),Vehicle::Radius,false,0),"Corner interaction test car is outside wall");
+        check(s.freePosition(playerAABB(s.player.position),false),"Corner interaction test player is outside wall");
+        check(s.freePosition(vehicleAABB(s.vehicles[0].position),false,0),"Corner interaction test car is outside wall");
         s.interact();check(s.mode==Mode::OnFoot,"Cannot enter car through building corner");
         s.reset();s.player.position={5.2f,0,5};s.player.position.y=0.5f;s.interact();
         check(s.mode==Mode::OnFoot,"Car entry requires grounded player");
@@ -82,7 +95,7 @@ int main() {
         walk.movement={-1,0};run(s,walk,360);check(!s.player.swimming,"Shore restores walking");
         // Both exit sides blocked: reject exit rather than teleporting through walls.
         s.reset();s.player.position={5.2f,0,5};s.interact();
-        s.world.buildings.push_back({s.vehicles[0].position.x,s.vehicles[0].position.z,20,20,10,0});
+        s.world.buildings.push_back(makeBlock(s.vehicles[0].position.x,s.vehicles[0].position.z,20,20,10,0));
         s.interact();check(s.mode==Mode::Driving,"A fully blocked exit preserves driving state");
         // Compare different simulation call rates and reject invalid time values.
         Simulation a,b;a.player.position={0,0,30};b.player.position={0,0,30};walk={};walk.movement={0,1};

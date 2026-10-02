@@ -132,22 +132,25 @@ void exterior(const Simulation& s,const View& v) {
             cube({x+stripe,0.105f,z+side},1,0.015f,2.6f,Paper);
             cube({x+side,0.105f,z+stripe},2.6f,0.015f,1,Paper);
         }
-    for (const Box& b : s.world.buildings) {
-        if (Vector3Distance(v.camera.position,{b.x,0,b.z})>155) continue;
-        cube({b.x-2,0.115f,b.z+2},b.width+4,0.01f,b.depth+4,{115,137,121,255});
+    for (const Block& b : s.world.buildings) {
+        const AABB& bb=b.bounds;
+        float cx=(bb.min.x+bb.max.x)/2, cz=(bb.min.z+bb.max.z)/2;
+        float w=bb.max.x-bb.min.x, h=bb.max.y-bb.min.y, d=bb.max.z-bb.min.z;
+        if (Vector3Distance(v.camera.position,{cx,0,cz})>155) continue;
+        cube({cx-2,0.115f,cz+2},w+4,0.01f,d+4,{115,137,121,255});
         Color c=Facades[b.palette];
-        cube({b.x,b.height/2,b.z},b.width,b.height,b.depth,c);
-        cube({b.x,b.height+0.18f,b.z},b.width+0.45f,0.36f,b.depth+0.45f,Paper);
-        cube({b.x+2,b.height+0.8f,b.z-2},4,1.3f,4,shade(c,0.8f));
-        for (float y=3;y<b.height-1;y+=3.8f) {
-            for (float x=b.x-b.width/2+2.7f;x<b.x+b.width/2-1;x+=4.3f) {
-                cube({x,y,b.z+b.depth/2+0.035f},1.6f,1.8f,0.06f,{65,95,99,255});
-                cube({x,y,b.z-b.depth/2-0.035f},1.6f,1.8f,0.06f,{78,109,112,255});
-                cube({x,y-0.95f,b.z+b.depth/2+0.10f},1.9f,0.12f,0.25f,Paper);
+        cube({cx,bb.min.y+h/2,cz},w,h,d,c);
+        cube({cx,bb.max.y+0.18f,cz},w+0.45f,0.36f,d+0.45f,Paper);
+        cube({cx+2,bb.max.y+0.8f,cz-2},4,1.3f,4,shade(c,0.8f));
+        for (float y=bb.min.y+3;y<bb.max.y-1;y+=3.8f) {
+            for (float x=bb.min.x+2.7f;x<bb.max.x-1;x+=4.3f) {
+                cube({x,y,bb.max.z+0.035f},1.6f,1.8f,0.06f,{65,95,99,255});
+                cube({x,y,bb.min.z-0.035f},1.6f,1.8f,0.06f,{78,109,112,255});
+                cube({x,y-0.95f,bb.max.z+0.10f},1.9f,0.12f,0.25f,Paper);
             }
-            for (float z=b.z-b.depth/2+3;z<b.z+b.depth/2-1;z+=4.3f) {
-                cube({b.x+b.width/2+0.035f,y,z},0.06f,1.8f,1.6f,{65,95,99,255});
-                cube({b.x-b.width/2-0.035f,y,z},0.06f,1.8f,1.6f,{65,95,99,255});
+            for (float z=bb.min.z+3;z<bb.max.z-1;z+=4.3f) {
+                cube({bb.max.x+0.035f,y,z},0.06f,1.8f,1.6f,{65,95,99,255});
+                cube({bb.min.x-0.035f,y,z},0.06f,1.8f,1.6f,{65,95,99,255});
             }
         }
     }
@@ -182,8 +185,11 @@ void interior(const Simulation& s) {
     cube({0,-0.15f,0},21,0.3f,21,{200,180,146,255});
     for (int i=-9;i<10;i+=2) cube({static_cast<float>(i),0.005f,0},0.035f,0.01f,19,{169,149,121,255});
     for (std::size_t i=0;i<s.world.room.size();++i) {
-        const Box& b=s.world.room[i];
-        cube({b.x,b.height/2,b.z},b.width,b.height,b.depth,i<4 ? Paper : Facades[b.palette]);
+        const Block& b=s.world.room[i];
+        const AABB& bb=b.bounds;
+        cube({(bb.min.x+bb.max.x)/2,(bb.min.y+bb.max.y)/2,(bb.min.z+bb.max.z)/2},
+             bb.max.x-bb.min.x,bb.max.y-bb.min.y,bb.max.z-bb.min.z,
+             i<4 ? Paper : Facades[b.palette]);
     }
     cube({0,1.55f,9.45f},2.8f,3.1f,0.06f,Mint);
     cube({-9.44f,2.7f,-2},0.06f,2.2f,5,{116,176,174,255});
@@ -204,9 +210,9 @@ void minimap(const Simulation& s,const View& v,float x,float y,float size) {
         Vector2 a=at({road-6,-104}); DrawRectangleV(a,{12*scale,size},Asphalt);
         a=at({-104,road-6}); DrawRectangleV(a,{178*scale,12*scale},Asphalt);
     }
-    for (const Box& b : s.world.buildings) {
-        Vector2 a=at({b.x-b.width/2,b.z-b.depth/2});
-        DrawRectangleV(a,{b.width*scale,b.depth*scale},{201,195,169,255});
+    for (const Block& b : s.world.buildings) {
+        Vector2 a=at({b.bounds.min.x,b.bounds.min.z});
+        DrawRectangleV(a,{(b.bounds.max.x-b.bounds.min.x)*scale,(b.bounds.max.z-b.bounds.min.z)*scale},{201,195,169,255});
     }
     Vector2 door=at(s.world.entrance); DrawCircleV(door,3.5f,Mint);
     for (const auto& veh : s.vehicles) {
@@ -231,7 +237,8 @@ void updateCamera(View& v,const Simulation& s,float dt,bool snap) {
     Ray ray{target,Vector3Normalize(offset)};
     float nearest=distance;
     for (const auto& b : s.mode==Mode::Interior ? s.world.room : s.world.buildings) {
-        BoundingBox box{{b.x-b.width/2-0.2f,-0.1f,b.z-b.depth/2-0.2f},{b.x+b.width/2+0.2f,b.height+0.2f,b.z+b.depth/2+0.2f}};
+        BoundingBox box{{b.bounds.min.x-0.2f,-0.1f,b.bounds.min.z-0.2f},
+                        {b.bounds.max.x+0.2f,b.bounds.max.y+0.2f,b.bounds.max.z+0.2f}};
         RayCollision hit=GetRayCollisionBox(ray,box);
         if (hit.hit && hit.distance<nearest) nearest=std::max(0.4f,hit.distance-0.3f);
     }
@@ -261,8 +268,11 @@ void drawScene(const Simulation& s,const View& v) {
     if (s.mode==Mode::Interior) interior(s); else exterior(s,v);
     if (s.mode!=Mode::Driving) playerModel(s.player,s.time,v.moving);
     if (v.debug) {
-        for (const auto& b : s.mode==Mode::Interior ? s.world.room : s.world.buildings)
-            DrawCubeWires({b.x,b.height/2,b.z},b.width+0.04f,b.height+0.04f,b.depth+0.04f,MAGENTA);
+        for (const auto& b : s.mode==Mode::Interior ? s.world.room : s.world.buildings) {
+            const AABB& bb=b.bounds;
+            DrawCubeWires({(bb.min.x+bb.max.x)/2,(bb.min.y+bb.max.y)/2,(bb.min.z+bb.max.z)/2},
+                          bb.max.x-bb.min.x+0.04f,bb.max.y-bb.min.y+0.04f,bb.max.z-bb.min.z+0.04f,MAGENTA);
+        }
         Vec2 p=s.focus(); float radius=s.mode==Mode::Driving ? Vehicle::Radius : 0.45f;
         DrawCylinderWires({p.x,0.1f,p.z},radius,radius,2,24,MAGENTA);
     }
